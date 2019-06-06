@@ -38,9 +38,6 @@ integer = lexeme L.decimal
 parens :: Parser a -> Parser a
 parens = between (symbol "(") (symbol ")")
 
-keyword :: String -> Parser ()
-keyword s = (lexeme . try) (C.string s *> notFollowedBy C.alphaNumChar)
-
 -- the actual parser
 identifier :: Parser Ident
 identifier = lexeme $ (:) <$> C.letterChar <*> many C.alphaNumChar
@@ -48,9 +45,9 @@ identifier = lexeme $ (:) <$> C.letterChar <*> many C.alphaNumChar
 -- expression parser
 lambda :: Parser Expr
 lambda = do
-  keyword "fn"
+  symbol "\\"
   param <- some identifier
-  keyword "=>"
+  symbol "=>"
   body <- expr
   return $ Lambda param body
 
