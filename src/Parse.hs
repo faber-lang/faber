@@ -1,4 +1,4 @@
-module Parser where
+module Parse where
 
 import Data.Void
 import Text.Megaparsec
