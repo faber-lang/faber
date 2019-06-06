@@ -1,6 +1,12 @@
 module Main where
 
-import Lib
+import Text.Megaparsec
+import Parse
+import Eval
 
 main :: IO ()
-main = someFunc
+main = do
+  result <- parse parser "" <$> getLine
+  case result of
+    Right e -> print (eval e) >> main
+    Left err -> print err
