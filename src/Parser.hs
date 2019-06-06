@@ -18,7 +18,7 @@ data Expr
 -- parser type definition
 type Parser = Parsec Void String
 
--- parsing utils
+-- lexer utils
 space :: Parser ()
 space = L.space C.space1 line block
   where
@@ -33,3 +33,10 @@ symbol = L.symbol space
 
 integer :: Parser Integer
 integer = lexeme L.decimal
+
+parens :: Parser a -> Parser a
+parens = between (symbol "(") (symbol ")")
+
+-- the actual parser
+identifier :: Parser String
+identifier = lexeme $ (:) <$> C.letterChar <*> many C.alphaNumChar
