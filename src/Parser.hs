@@ -54,18 +54,19 @@ lambda = do
   body <- expr
   return $ Lambda param body
 
-apply :: Parser Expr
-apply = do
-  lhs <- expr
-  rhs <- expr
-  return $ Apply lhs rhs
+operators :: [[Operator Parser Expr]]
+operators =
+  [ [ InfixL (Apply <$ symbol "") ] ]
 
 term :: Parser Expr
 term = parens expr
+  <|> lambda
   <|> Variable <$> identifier
   <|> Integer <$> integer
-  <|> lambda
-  <|> apply
 
 expr :: Parser Expr
-expr = makeExprParser term []
+expr = makeExprParser term operators
+
+-- wrap them up
+parser :: Parser Expr
+parser = between space eof expr
