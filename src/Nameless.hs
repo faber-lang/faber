@@ -2,7 +2,7 @@ module Nameless where
 
 import Data.List
 import Data.Maybe
-import qualified Parse as P
+import qualified Desugar as D
 
 data Expr
   = Integer Int
@@ -12,11 +12,11 @@ data Expr
   | Bound Int
   deriving (Show)
 
-nameless' :: [P.Ident] -> P.Expr -> Expr
-nameless' t (P.Apply fn arg) = Apply (nameless' t fn) (nameless' t arg)
-nameless' t (P.Lambda p body) = Lambda $ nameless' (p : t) body
-nameless' t (P.Variable name) = maybe (Free name) Bound $ elemIndex name t
-nameless' _ (P.Integer i) = Integer i
+nameless' :: [String] -> D.Expr -> Expr
+nameless' t (D.Apply fn arg) = Apply (nameless' t fn) (nameless' t arg)
+nameless' t (D.Lambda p body) = Lambda $ nameless' (p : t) body
+nameless' t (D.Variable name) = maybe (Free name) Bound $ elemIndex name t
+nameless' _ (D.Integer i) = Integer i
 
-nameless :: P.Expr -> Expr
+nameless :: D.Expr -> Expr
 nameless = nameless' []

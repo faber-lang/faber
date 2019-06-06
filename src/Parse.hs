@@ -11,7 +11,7 @@ type Ident = String
 
 data Expr
   = Integer Int
-  | Lambda Ident Expr
+  | Lambda [Ident] Expr
   | Apply Expr Expr
   | Variable Ident
   deriving (Show)
@@ -49,7 +49,7 @@ identifier = lexeme $ (:) <$> C.letterChar <*> many C.alphaNumChar
 lambda :: Parser Expr
 lambda = do
   keyword "fn"
-  param <- identifier
+  param <- some identifier
   keyword "=>"
   body <- expr
   return $ Lambda param body
