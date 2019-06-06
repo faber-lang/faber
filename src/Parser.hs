@@ -2,6 +2,7 @@ module Parser where
 
 import Data.Void
 import Text.Megaparsec
+import Control.Monad.Combinators.Expr
 import qualified Text.Megaparsec.Char as C
 import qualified Text.Megaparsec.Char.Lexer as L
 
@@ -31,12 +32,40 @@ lexeme = L.lexeme space
 symbol :: String -> Parser String
 symbol = L.symbol space
 
-integer :: Parser Integer
+integer :: Parser Int
 integer = lexeme L.decimal
 
 parens :: Parser a -> Parser a
 parens = between (symbol "(") (symbol ")")
 
+keyword :: String -> Parser ()
+keyword s = (lexeme . try) (C.string s *> notFollowedBy C.alphaNumChar)
+
 -- the actual parser
-identifier :: Parser String
+identifier :: Parser Ident
 identifier = lexeme $ (:) <$> C.letterChar <*> many C.alphaNumChar
+
+-- expression parser
+lambda :: Parser Expr
+lambda = do
+  keyword "\\"
+  param <- identifier
+  keyword "=>"
+  body <- expr
+  return $ Lambda param body
+
+apply :: Parser Expr
+apply = do
+  lhs <- expr
+  rhs <- expr
+  return $ Apply lhs rhs
+
+term :: Parser Expr
+term = parens expr
+  <|> Variable <$> identifier
+  <|> Integer <$> integer
+  <|> lambda
+  <|> apply
+
+expr :: Parser Expr
+expr = makeExprParser term []
