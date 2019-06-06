@@ -1,6 +1,7 @@
 module Eval where
 
-import Parse (Expr)
+import qualified Parse as P
+import qualified Nameless as N
 
-eval :: Expr -> Expr
-eval = id
+eval :: P.Expr -> N.Expr
+eval x = N.nameless x
