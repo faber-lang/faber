@@ -48,7 +48,7 @@ identifier = lexeme $ (:) <$> C.letterChar <*> many C.alphaNumChar
 -- expression parser
 lambda :: Parser Expr
 lambda = do
-  keyword "\\"
+  keyword "fn"
   param <- identifier
   keyword "=>"
   body <- expr
