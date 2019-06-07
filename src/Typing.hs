@@ -61,6 +61,7 @@ data TypeError
   = UnificationFail Type Type
   | InfiniteType Int Type
   | UnboundVariable String
+  deriving (Show)
 
 runInfer :: Infer (Subst, Type) -> Either TypeError Type
 runInfer m = case evalState (runExceptT m) initUnique of
@@ -110,3 +111,6 @@ infer p env e = case e of
     (s2, b_ty) <- infer p (apply s1 env) b
     s3 <- unify (apply s2 a_ty) (Function b_ty tv)
     return (s3 `compose` s2 `compose` s1, apply s3 tv)
+
+typing :: N.Expr -> Either TypeError Type
+typing e = runInfer $ infer Map.empty initEnv e
