@@ -24,14 +24,21 @@ type Subst = Map.Map TVar Type
 
 class Substitutable a where
   apply :: Subst -> a -> a
+  ftv :: a -> Set.Set Int
 
 instance Substitutable Type where
   apply s t@(Variable i) = Map.findWithDefault t i s
   apply s (Function a b) = Function (apply s a) (apply s b)
   apply s t = t
 
+  ftv (Function a b) = ftv a `Set.union` ftv b
+  ftv (Variable i) = Set.singleton i
+  ftv Integer = Set.empty
+
 instance Substitutable TypeEnv where
   apply s (TypeEnv env) = TypeEnv $ map (apply s) env
+
+  ftv (TypeEnv env) = foldr (Set.union . ftv) Set.empty
 
 compose :: Subst -> Subst -> Subst
 s1 `compose` s2 = Map.map (apply s1) s2 `Map.union` s1
@@ -44,7 +51,7 @@ type Infer = ExceptT TypeError (State Unique)
 
 data TypeError
   = UnificationFail Type Type
-  | InfiniteType TVar Type
+  | InfiniteType Int Type
   | UnboundVariable String
 
 runInfer :: Infer (Subst, Type) -> Either TypeError Scheme
@@ -70,7 +77,11 @@ unify t1 t2 = throwError $ UnificationFail t1 t2
 
 bind :: Int -> Type -> Infer Subst
 bind i t | t == Variable i = return nullSubst
+         | occursCheck i t = throwError $ InifiniteType i t
          | otherwise       = return $ Map.singleton i t
+
+occursCheck :: Substitute a => Int -> a -> Bool
+occursCheck i t = a `Set.member` ftv t
 
 type Preset = Map.Map String Type
 
