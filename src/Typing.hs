@@ -111,6 +111,20 @@ infer p env e = case e of
     (s2, b_ty) <- infer p (apply s1 env) b
     s3 <- unify (apply s2 a_ty) (Function b_ty tv)
     return (s3 `compose` s2 `compose` s1, apply s3 tv)
+  N.BinaryOp op a b ->
+    let op_type = Integer in
+    do
+      (s1, a_ty) <- infer p env a
+      (s2, b_ty) <- infer p (apply s1 env) b
+      s3 <- unify (apply s2 a_ty) op_type
+      s4 <- unify (apply s3 b_ty) op_type
+      return (s4 `compose` s3 `compose` s2 `compose` s1, op_type)
+  N.SingleOp op x ->
+    let op_type = Integer in
+    do
+      (s1, ty) <- infer p env x
+      s2 <- unify (apply s1 ty) op_type
+      return (s2 `compose` s1, op_type)
 
 typing :: N.Expr -> Either TypeError Type
 typing e = runInfer $ infer Map.empty initEnv e

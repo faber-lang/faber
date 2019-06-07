@@ -5,6 +5,7 @@ import Text.Megaparsec
 import Control.Monad.Combinators.Expr
 import qualified Text.Megaparsec.Char as C
 import qualified Text.Megaparsec.Char.Lexer as L
+import qualified Operators as Op
 
 -- syntax tree
 type Ident = String
@@ -14,6 +15,8 @@ data Expr
   | Lambda [Ident] Expr
   | Apply Expr Expr
   | Variable Ident
+  | BinaryOp Op.BinaryOp Expr Expr
+  | SingleOp Op.SingleOp Expr
   deriving (Show)
 
 -- parser type definition
@@ -53,7 +56,11 @@ lambda = do
 
 operators :: [[Operator Parser Expr]]
 operators =
-  [ [ InfixL (Apply <$ symbol "") ] ]
+  [ [ InfixL (Apply <$ symbol "") ],
+    [ Prefix (SingleOp Op.Positive <$ symbol "+")
+    , Prefix (SingleOp Op.Negative <$ symbol "-") ],
+    [ InfixL (BinaryOp Op.Mul <$ symbol "*") ],
+    [ InfixL (BinaryOp Op.Add <$ symbol "+") ] ]
 
 term :: Parser Expr
 term = parens expr
