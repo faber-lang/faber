@@ -22,8 +22,19 @@ append :: (TypeEnv env) = TypeEnv . (: env)
 
 type Subst = Map.Map TVar Type
 
-apply :: Subst -> TypeEnv -> TypeEnv
+class Substitutable a where
+  apply :: Subst -> a -> a
+
+instance Substitutable Type where
+  apply s t@(Variable i) = Map.findWithDefault t i s
+  apply s (Function a b) = Function (apply s a) (apply s b)
+  apply s t = t
+
+instance Substitutable TypeEnv where
+  apply s (TypeEnv env) = TypeEnv $ map (apply s) env
+
 compose :: Subst -> Subst -> Subst
+s1 `compose` s2 = Map.map (apply s1) s2 `Map.union` s1
 
 newtype Unique = Unique Int
 initUnique :: Unique
