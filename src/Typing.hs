@@ -14,14 +14,15 @@ data Type
   = Integer
   | Function Type Type
   | Variable TVar
+  deriving (Show, Eq)
 
 newtype TypeEnv = TypeEnv [Type]
 
 initEnv :: TypeEnv
 initEnv = TypeEnv []
 lookupEnv :: TypeEnv -> TVar -> Type
-lookupEnv (TypeEnv env) = fromJust . elemIndex env
-appendEnv :: TypeEnv -> Int -> TypeEnv
+lookupEnv (TypeEnv env) = (env !!)
+appendEnv :: TypeEnv -> Type -> TypeEnv
 appendEnv (TypeEnv env) = TypeEnv . (: env)
 
 type Subst = Map.Map TVar Type
