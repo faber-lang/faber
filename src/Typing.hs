@@ -59,6 +59,18 @@ fresh = do
   return $ Variable i
 
 unify :: Type -> Type -> Infer Subst
+unify (Function a1 b1) (Function a2 b2) = do
+  s_a <- unify a1 a2
+  s_b <- unify (apply s_a b1) (apply s_b b2)
+  return $ s_a `compose` s_b
+unify (Variable i) t = bind i t
+unify t (Variable i) = bind i t
+unify Integer Integer = return nullSubst
+unify t1 t2 = throwError $ UnificationFail t1 t2
+
+bind :: Int -> Type -> Infer Subst
+bind i t | t == Variable i = return nullSubst
+         | otherwise       = return $ Map.singleton i t
 
 type Preset = Map.Map String Type
 
