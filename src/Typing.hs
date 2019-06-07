@@ -1,6 +1,8 @@
 module Typing where
 
 import qualified Nameless as N
+import qualified Data.Map as Map
+import qualified Data.Set as Set
 import Control.Monad.State
 import Control.Monad.Except
 
@@ -16,9 +18,9 @@ newtype TypeEnv = TypeEnv [Type]
 initEnv :: TypeEnv
 initEnv = TypeEnv []
 lookup :: TypeEnv -> TVar -> Type
-loopup (TypeEnv env) = fromJust . elemIndex env
-append :: TypeEnv -> Scheme -> TypeEnv
-append :: (TypeEnv env) = TypeEnv . (: env)
+lookup (TypeEnv env) = fromJust . elemIndex env
+append :: TypeEnv -> Int -> TypeEnv
+append (TypeEnv env) = TypeEnv . (: env)
 
 type Subst = Map.Map TVar Type
 
@@ -54,7 +56,7 @@ data TypeError
   | InfiniteType Int Type
   | UnboundVariable String
 
-runInfer :: Infer (Subst, Type) -> Either TypeError Scheme
+runInfer :: Infer (Subst, Type) -> Either TypeError Type
 runInfer m = case evalState (runExceptT m) initUnique of
   Left err  -> Left err
   Right res -> Right $ closeOver res
@@ -80,7 +82,7 @@ bind i t | t == Variable i = return nullSubst
          | occursCheck i t = throwError $ InifiniteType i t
          | otherwise       = return $ Map.singleton i t
 
-occursCheck :: Substitute a => Int -> a -> Bool
+occursCheck :: Substitutable a => Int -> a -> Bool
 occursCheck i t = a `Set.member` ftv t
 
 type Preset = Map.Map String Type
@@ -96,7 +98,7 @@ infer p env e = case e of
     tv <- fresh
     (s, ret) <- infer p (append env tv) body
     return (s, Function (apply s tv) ret)
-  N.Apply a b ->
+  N.Apply a b -> do
     tv <- fresh
     (s1, a_ty) <- infer p env a
     (s2, b_ty) <- infer p (apply s1 env) b
