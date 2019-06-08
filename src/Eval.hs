@@ -6,12 +6,15 @@ import qualified Desugar as D
 import qualified Typing as T
 import qualified Closure as C
 import qualified Hoist as H
+import qualified Codegen as Gen
 
-eval :: P.Expr -> (T.Type, N.Expr, H.Module)
-eval x = (t, e, c)
+import Data.Text.IO as TIO (putStrLn)
+
+eval :: P.Expr -> IO ()
+eval x = TIO.putStrLn =<< c
   where
     e = N.nameless $ D.desugar x
     t = case T.typing e of
           Right t -> t
           Left err -> error $ show err
-    c = H.hoist $ C.convert e
+    c = Gen.to_llvm $ Gen.codegen $ H.hoist $ C.convert e
