@@ -33,11 +33,14 @@ const_int :: Int -> AST.Operand
 const_int i = AST.ConstantOperand $ Const.Int 64 $ toInteger i
 
 gen_expr :: (IR.MonadIRBuilder m, IR.MonadModuleBuilder m) => [AST.Operand] -> Expr -> m AST.Operand
-gen_expr _    (Integer i) = return $ const_int i
+gen_expr _    (Integer i) = IR.bitcast (const_int i) generic_ptr
 gen_expr args (Parameter i) = return $ args !! i
-gen_expr _    (FunctionRef i) = return $ AST.ConstantOperand $ Const.GlobalReference function_ptr $ AST.mkName $ name_function i
+gen_expr _    (FunctionRef i) = IR.bitcast (AST.ConstantOperand f_ref) generic_ptr
+  where
+    f_ref = Const.GlobalReference function_ptr $ AST.mkName $ name_function i
 gen_expr args (Call f a) = do
   f' <- gen_expr args f
+  f' <- IR.bitcast f' function_ptr
   a' <- mapM (gen_expr args) a
   IR.call f' $ map (,[]) a'
 gen_expr args (Tuple xs) = do
