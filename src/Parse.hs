@@ -71,7 +71,7 @@ operators =
     [ InfixL (BinaryOp Op.Add <$ symbol "+") ] ]
 
 term :: Parser Expr
-term = parens expr
+term = try (parens expr)
   <|> tuple
   <|> lambda
   <|> Variable <$> identifier
