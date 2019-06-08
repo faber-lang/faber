@@ -19,6 +19,7 @@ import qualified LLVM.Module  as LLVM
 import qualified LLVM.Context as LLVM
 
 import Hoist
+import Operators as Op
 
 -- TODO: every function takes two parameters, fix it with typing
 
@@ -72,6 +73,28 @@ gen_expr args b (LocalLet e x) = do
   gen_expr args (Just e') x
 gen_expr args (Just b) LetBound = return b
 gen_expr args Nothing LetBound = error "unbound let binding"
+gen_expr args b (BinaryOp op l r) = apply_op <$> gen_expr args b l <*> gen_expr args b r >>= id
+  where
+    apply_op a b = do
+      a' <- IR.ptrtoint a Ty.i64
+      b' <- IR.ptrtoint b Ty.i64
+      x <- opr a' b'
+      IR.inttoptr x generic_ptr
+    opr =
+      case op of
+        Op.Add -> IR.add
+        Op.Mul -> IR.mul
+
+gen_expr args b (SingleOp op e) = apply_op =<< gen_expr args b e
+  where
+    apply_op v = do
+      v' <- IR.ptrtoint v Ty.i64
+      x <- opr v'
+      IR.inttoptr x generic_ptr
+    opr =
+      case op of
+        Op.Negative -> IR.sub $ const_int 0
+        Op.Positive -> return
 
 gen_function :: IR.MonadModuleBuilder m => String -> Function -> m AST.Operand
 gen_function name (Function expr) =
