@@ -4,6 +4,7 @@ import Control.Monad.State
 import qualified Nameless as N
 import qualified Operators as Op
 
+-- `Function` constructor directly corresponds to the real function
 data Expr
   = Integer Int
   | Function Expr
@@ -17,34 +18,29 @@ data Expr
   | NthOf Int Expr
   deriving (Show)
 
+-- holds a list of free variables as a state
 type Convert = State [Int]
 
+-- convert a body of lambda
 convert' :: N.Expr -> Convert Expr
 convert' (N.Bound 0) = return Parameter
 convert' (N.Bound i) = do
-  modify (newi:)
-  return $ NthOf newi Env
+  modify (idx:)
+  return $ NthOf idx Env
   where
-    newi = i - 1
+    -- index in outer lambda (`modify`...)
+    -- and index in environment tuple (`NthOf`...)
+    idx = i - 1
 convert' (N.Lambda e) = do
   t <- convert' $ N.Tuple $ map N.Bound fvs
-  return $ Tuple [f, t]
+  return $ Tuple [Function body, t]
   where
     (body, fvs) = runState (convert' e) []
-    f = Function body
 convert' (N.Integer i) = return $ Integer i
-convert' (N.Apply a b) = do
-  a' <- convert' a
-  b' <- convert' b
-  return $ Apply a' b'
-convert' (N.BinaryOp op a b) = do
-  a' <- convert' a
-  b' <- convert' b
-  return $ BinaryOp op a' b'
-convert' (N.SingleOp op x) = do
-  x' <- convert' x
-  return $ SingleOp op x'
-convert' (N.Tuple xs) = fmap Tuple $ mapM convert' xs
+convert' (N.Apply a b) = Apply <$> convert' a <*> convert' b
+convert' (N.BinaryOp op a b) = BinaryOp op <$> convert' a <*> convert' b
+convert' (N.SingleOp op x) = SingleOp op <$> convert' x
+convert' (N.Tuple xs) = Tuple <$> mapM convert' xs
 
 convert :: N.Expr -> Expr
 convert e = evalState (convert' e) []
