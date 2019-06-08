@@ -25,6 +25,8 @@ dependencies:
 - parser-combinators
 - mtl
 - containers
+- llvm-hs-pure
+- llvm-hs
 
 library:
   source-dirs: src
