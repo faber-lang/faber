@@ -100,40 +100,35 @@ bind i t | t == Variable i = return nullSubst
 occursCheck :: Substitutable a => Int -> a -> Bool
 occursCheck i t = i `Set.member` ftv t
 
-type Preset = Map.Map String Type
-
-infer :: Preset -> TypeEnv -> N.Expr -> Infer (Subst, Type)
-infer p env e = case e of
+infer :: TypeEnv -> N.Expr -> Infer (Subst, Type)
+infer env e = case e of
   N.Bound i -> return (nullSubst, lookupEnv env i)
-  N.Free s -> case Map.lookup s p of
-    Nothing -> throwError $ UnboundVariable s
-    Just t -> return (nullSubst, t)
   N.Integer _ -> return (nullSubst, Integer)
   N.Lambda body -> do
     tv <- fresh
-    (s, ret) <- infer p (appendEnv env tv) body
+    (s, ret) <- infer (appendEnv env tv) body
     return (s, Function (apply s tv) ret)
   N.Apply a b -> do
     tv <- fresh
-    (s1, a_ty) <- infer p env a
-    (s2, b_ty) <- infer p (apply s1 env) b
+    (s1, a_ty) <- infer env a
+    (s2, b_ty) <- infer (apply s1 env) b
     s3 <- unify (apply s2 a_ty) (Function b_ty tv)
     return (s3 `compose` s2 `compose` s1, apply s3 tv)
   N.BinaryOp op a b ->
     let op_type = Integer in
     do
-      (s1, a_ty) <- infer p env a
-      (s2, b_ty) <- infer p (apply s1 env) b
+      (s1, a_ty) <- infer env a
+      (s2, b_ty) <- infer (apply s1 env) b
       s3 <- unify (apply s2 a_ty) op_type
       s4 <- unify (apply s3 b_ty) op_type
       return (s4 `compose` s3 `compose` s2 `compose` s1, op_type)
   N.SingleOp op x ->
     let op_type = Integer in
     do
-      (s1, ty) <- infer p env x
+      (s1, ty) <- infer env x
       s2 <- unify (apply s1 ty) op_type
       return (s2 `compose` s1, op_type)
-  N.Tuple xs -> (foldr compose nullSubst *** Tuple) <$> mapAndUnzipM (infer p env) xs
+  N.Tuple xs -> (foldr compose nullSubst *** Tuple) <$> mapAndUnzipM (infer env) xs
 
 typing :: N.Expr -> Either TypeError Type
-typing e = runInfer $ infer Map.empty initEnv e
+typing = runInfer . infer initEnv
