@@ -20,6 +20,8 @@ import qualified LLVM.Context as LLVM
 
 import Hoist
 
+-- TODO: every function takes two parameters, fix it with typing
+
 generic_ptr :: Ty.Type
 generic_ptr = Ty.ptr Ty.i8
 
@@ -52,7 +54,9 @@ gen_expr args (Call f a) = do
   f' <- gen_expr args f
   f' <- IR.bitcast f' function_ptr
   a' <- mapM (gen_expr args) a
-  IR.call f' $ map (,[]) a'
+  IR.call f' $ map (,[]) $ pad a'
+  where
+    pad xs = take 2 $ xs ++ repeat (AST.ConstantOperand $ Const.Null generic_ptr)
 gen_expr args (Tuple xs) = do
   xs' <- mapM (gen_expr args) xs
   m <- call_malloc $ const_int $ length xs
@@ -70,7 +74,7 @@ gen_expr args (NthOf i e) = do
 
 gen_function :: IR.MonadModuleBuilder m => String -> Function -> m AST.Operand
 gen_function name (Function expr) =
-  IR.function (AST.mkName name) [(generic_ptr, "env"), (generic_ptr, "param")] generic_ptr $ \args -> do
+  IR.function (AST.mkName name) [(generic_ptr, IR.NoParameterName), (generic_ptr, IR.NoParameterName)] generic_ptr $ \args -> do
     IR.ret =<< gen_expr args expr
 
 name_function :: Int -> String
