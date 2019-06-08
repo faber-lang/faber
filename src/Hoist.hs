@@ -7,6 +7,7 @@ import qualified Operators as Op
 -- `Call` and `Function` directly correspond to the actual call and function
 newtype Function = Function Expr deriving (Show)
 
+-- `FunctionRef` refer to `length funs - i`th function
 data Expr
   = Integer Int
   | Parameter Int
@@ -23,7 +24,7 @@ type Hoist = State [Function]
 hoist_fun :: Expr -> Hoist Expr
 hoist_fun e = do
   modify (Function e:)
-  FunctionRef <$> pred <$> length <$> get
+  FunctionRef <$> length <$> get
 
 convert_apply :: Expr -> Expr -> Hoist Expr
 convert_apply a b = do
