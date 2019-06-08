@@ -48,11 +48,7 @@ identifier = lexeme $ (:) <$> C.letterChar <*> many C.alphaNumChar
 
 -- expression parser
 tuple :: Parser Expr
-tuple = do
-  symbol "("
-  values <- expr `sepEndBy` symbol ","
-  symbol ")"
-  return $ Tuple values
+tuple = Tuple <$> parens (expr `sepEndBy` symbol ",")
 
 lambda :: Parser Expr
 lambda = do
