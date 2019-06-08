@@ -1,4 +1,4 @@
-module Eval where
+module Compile where
 
 import qualified Parse as P
 import qualified Nameless as N
@@ -8,10 +8,10 @@ import qualified Closure as C
 import qualified Hoist as H
 import qualified Codegen as Gen
 
-import Data.Text.IO as TIO (putStrLn)
+import Data.Text
 
-eval :: P.Expr -> IO ()
-eval x = TIO.putStrLn =<< c
+compile :: P.Expr -> IO Text
+compile x = c
   where
     e = N.nameless $ D.desugar x
     t = case T.typing e of
