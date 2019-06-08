@@ -4,7 +4,6 @@ import Control.Monad.State
 import qualified Nameless as N
 import qualified Operators as Op
 
--- `Function` constructor directly corresponds to the real function
 data Expr
   = Integer Int
   | Function Expr
