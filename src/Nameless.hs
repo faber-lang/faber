@@ -13,6 +13,7 @@ data Expr
   | Bound Int
   | BinaryOp Op.BinaryOp Expr Expr
   | SingleOp Op.SingleOp Expr
+  | Tuple [Expr]
   deriving (Show)
 
 nameless' :: [String] -> D.Expr -> Expr
@@ -22,6 +23,7 @@ nameless' t (D.Variable name) = maybe (Free name) Bound $ elemIndex name t
 nameless' _ (D.Integer i) = Integer i
 nameless' t (D.BinaryOp op a b) = BinaryOp op (nameless' t a) (nameless' t b)
 nameless' t (D.SingleOp op x) = SingleOp op $ nameless' t x
+nameless' t (D.Tuple xs) = Tuple $ map (nameless' t) xs
 
 nameless :: D.Expr -> Expr
 nameless = nameless' []

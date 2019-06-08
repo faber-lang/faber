@@ -10,6 +10,7 @@ data Expr
   | Variable String
   | BinaryOp Op.BinaryOp Expr Expr
   | SingleOp Op.SingleOp Expr
+  | Tuple [Expr]
   deriving (Show)
 
 desugar_lambda :: [String] -> Expr -> Expr
@@ -23,3 +24,4 @@ desugar (P.Apply a b) = Apply (desugar a) (desugar b)
 desugar (P.Variable x) = Variable x
 desugar (P.BinaryOp op a b) = BinaryOp op (desugar a) (desugar b)
 desugar (P.SingleOp op x) = SingleOp op $ desugar x
+desugar (P.Tuple xs) = Tuple $ map desugar xs
