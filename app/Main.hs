@@ -8,5 +8,5 @@ main :: IO ()
 main = do
   result <- parse parser "" <$> getLine
   case result of
-    Right e -> print (eval e) >> main
+    Right e -> eval e >> main
     Left err -> print err

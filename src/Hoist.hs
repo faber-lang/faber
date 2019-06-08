@@ -7,7 +7,6 @@ import qualified Operators as Op
 -- `Call` and `Function` directly correspond to the actual call and function
 newtype Function = Function Expr deriving (Show)
 
--- `FunctionRef` refer to `length funs - i`th function
 data Expr
   = Integer Int
   | Parameter Int
@@ -17,6 +16,13 @@ data Expr
   | SingleOp Op.SingleOp Expr
   | Tuple [Expr]
   | NthOf Int Expr
+  | LocalLet Expr Expr
+  | LetBound
+  deriving (Show)
+
+data Module =
+  Module { functions :: [Function]
+         , entrypoint :: Expr }
   deriving (Show)
 
 type Hoist = State [Function]
@@ -24,12 +30,10 @@ type Hoist = State [Function]
 hoist_fun :: Expr -> Hoist Expr
 hoist_fun e = do
   modify (Function e:)
-  FunctionRef <$> length <$> get
+  FunctionRef <$> pred <$> length <$> get
 
 convert_apply :: Expr -> Expr -> Hoist Expr
-convert_apply a b = do
-  ref <- hoist_fun $ Call (NthOf 0 $ Parameter 0) [NthOf 1 $ Parameter 0, b]
-  return $ Call ref [a]
+convert_apply a b = return $ LocalLet a $ Call (NthOf 0 LetBound) [NthOf 1 LetBound, b]
 
 hoist' :: C.Expr -> Hoist Expr
 -- function hoisting
@@ -45,5 +49,7 @@ hoist' (C.SingleOp op x) = SingleOp op <$> hoist' x
 hoist' (C.Tuple xs) = Tuple <$> mapM hoist' xs
 hoist' (C.NthOf i x) = NthOf i <$> hoist' x
 
-hoist :: C.Expr -> (Expr, [Function])
-hoist e = runState (hoist' e) []
+hoist :: C.Expr -> Module
+hoist e = Module { functions = reverse funs, entrypoint = e' }
+  where
+    (e', funs) = runState (hoist' e) []

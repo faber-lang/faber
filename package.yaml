@@ -27,6 +27,7 @@ dependencies:
 - containers
 - llvm-hs-pure
 - llvm-hs
+- text
 
 library:
   source-dirs: src
