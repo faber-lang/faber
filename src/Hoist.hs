@@ -16,6 +16,8 @@ data Expr
   | SingleOp Op.SingleOp Expr
   | Tuple [Expr]
   | NthOf Int Expr
+  | LocalLet Expr Expr
+  | LetBound
   deriving (Show)
 
 data Module =
@@ -31,9 +33,7 @@ hoist_fun e = do
   FunctionRef <$> pred <$> length <$> get
 
 convert_apply :: Expr -> Expr -> Hoist Expr
-convert_apply a b = do
-  ref <- hoist_fun $ Call (NthOf 0 $ Parameter 0) [NthOf 1 $ Parameter 0, b]
-  return $ Call ref [a]
+convert_apply a b = return $ LocalLet a $ Call (NthOf 0 LetBound) [NthOf 1 LetBound, b]
 
 hoist' :: C.Expr -> Hoist Expr
 -- function hoisting

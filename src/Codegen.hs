@@ -42,19 +42,19 @@ call_malloc len = IR.call malloc [(len, [])]
   where
     malloc = named_function (Ty.FunctionType generic_ptr [Ty.i64] False) "malloc"
 
-gen_expr :: (IR.MonadIRBuilder m, IR.MonadModuleBuilder m) => [AST.Operand] -> Expr -> m AST.Operand
-gen_expr _    (Integer i) = IR.inttoptr (const_int i) generic_ptr
-gen_expr args (Parameter i) = return $ args !! i
-gen_expr _    (FunctionRef i) = IR.bitcast (named_function function_type $ name_function i) generic_ptr
-gen_expr args (Call f a) = do
-  f' <- gen_expr args f
+gen_expr :: (IR.MonadIRBuilder m, IR.MonadModuleBuilder m) => [AST.Operand] -> Maybe AST.Operand -> Expr -> m AST.Operand
+gen_expr _    _  (Integer i) = IR.inttoptr (const_int i) generic_ptr
+gen_expr args _ (Parameter i) = return $ args !! i
+gen_expr _    _ (FunctionRef i) = IR.bitcast (named_function function_type $ name_function i) generic_ptr
+gen_expr args b (Call f a) = do
+  f' <- gen_expr args b f
   f' <- IR.bitcast f' function_ptr
-  a' <- mapM (gen_expr args) a
+  a' <- mapM (gen_expr args b) a
   IR.call f' $ map (,[]) $ pad a'
   where
     pad xs = take 2 $ xs ++ repeat (AST.ConstantOperand $ Const.Null generic_ptr)
-gen_expr args (Tuple xs) = do
-  xs' <- mapM (gen_expr args) xs
+gen_expr args b (Tuple xs) = do
+  xs' <- mapM (gen_expr args b) xs
   m <- call_malloc $ const_int $ length xs * 8
   m <- IR.bitcast m $ Ty.ptr generic_ptr
   forM_ (zip [0..] xs') $ \(i, x) -> do
@@ -62,16 +62,21 @@ gen_expr args (Tuple xs) = do
     IR.store e 0 x
   m <- IR.bitcast m $ generic_ptr
   return m
-gen_expr args (NthOf i e) = do
-  e' <- gen_expr args e
+gen_expr args b (NthOf i e) = do
+  e' <- gen_expr args b e
   e' <- IR.bitcast e' $ Ty.ptr generic_ptr
   ptr <- IR.gep e' [const_int i]
   IR.load ptr 0
+gen_expr args b (LocalLet e x) = do
+  e' <- gen_expr args b e
+  gen_expr args (Just e') x
+gen_expr args (Just b) LetBound = return b
+gen_expr args Nothing LetBound = error "unbound let binding"
 
 gen_function :: IR.MonadModuleBuilder m => String -> Function -> m AST.Operand
 gen_function name (Function expr) =
   IR.function (AST.mkName name) [(generic_ptr, IR.NoParameterName), (generic_ptr, IR.NoParameterName)] generic_ptr $ \args -> do
-    IR.ret =<< gen_expr args expr
+    IR.ret =<< gen_expr args Nothing expr
 
 name_function :: Int -> String
 name_function i = "__faber_fn_" ++ show i
@@ -81,7 +86,7 @@ codegen m = IR.buildModule "faber-output" $ do
   _ <- IR.extern "malloc" [Ty.i64] generic_ptr
   zipWithM_ (gen_function . name_function) [0..] (functions m)
   IR.function "main" [(Ty.i32, "argc"), (Ty.ptr (Ty.ptr Ty.i8), "argv")] Ty.i32 $ \[_, _] -> do
-    ret <- gen_expr [] (entrypoint m)
+    ret <- gen_expr [] Nothing (entrypoint m)
     int <- IR.ptrtoint ret Ty.i64
     IR.ret =<< IR.trunc int Ty.i32
 
