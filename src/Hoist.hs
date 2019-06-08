@@ -28,7 +28,7 @@ type Hoist = State [Function]
 hoist_fun :: Expr -> Hoist Expr
 hoist_fun e = do
   modify (Function e:)
-  FunctionRef <$> length <$> get
+  FunctionRef <$> pred <$> length <$> get
 
 convert_apply :: Expr -> Expr -> Hoist Expr
 convert_apply a b = do
