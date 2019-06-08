@@ -32,12 +32,13 @@ function_ptr = Ty.ptr function_type
 const_int :: Int -> AST.Operand
 const_int i = AST.ConstantOperand $ Const.Int 64 $ toInteger i
 
+named_function :: Ty.Type -> String -> AST.Operand
+named_function t = AST.ConstantOperand . Const.GlobalReference (Ty.ptr t) . AST.mkName
+
 gen_expr :: (IR.MonadIRBuilder m, IR.MonadModuleBuilder m) => [AST.Operand] -> Expr -> m AST.Operand
-gen_expr _    (Integer i) = IR.bitcast (const_int i) generic_ptr
+gen_expr _    (Integer i) = return $ const_int i
 gen_expr args (Parameter i) = return $ args !! i
-gen_expr _    (FunctionRef i) = IR.bitcast (AST.ConstantOperand f_ref) generic_ptr
-  where
-    f_ref = Const.GlobalReference function_ptr $ AST.mkName $ name_function i
+gen_expr _    (FunctionRef i) = IR.bitcast (named_function function_type $ name_function i) generic_ptr
 gen_expr args (Call f a) = do
   f' <- gen_expr args f
   f' <- IR.bitcast f' function_ptr
@@ -45,7 +46,6 @@ gen_expr args (Call f a) = do
   IR.call f' $ map (,[]) a'
 gen_expr args (Tuple xs) = do
   xs' <- mapM (gen_expr args) xs
-  malloc <- IR.extern (AST.mkName "malloc") [Ty.i64] generic_ptr
   m <- IR.call malloc [(const_int len, [])]
   m <- IR.bitcast m $ Ty.ptr generic_ptr
   forM_ (zip [0..] xs') $ \(i, x) -> do
@@ -55,6 +55,7 @@ gen_expr args (Tuple xs) = do
   return m
   where
     len = length xs
+    malloc = named_function (Ty.FunctionType generic_ptr [Ty.i64] False) "malloc"
 gen_expr args (NthOf i e) = do
   e' <- gen_expr args e
   e' <- IR.bitcast e' $ Ty.ptr generic_ptr
@@ -71,6 +72,7 @@ name_function i = "__faber_fn_" ++ show i
 
 codegen :: Module -> AST.Module
 codegen m = IR.buildModule "faber-output" $ do
+  _ <- IR.extern "malloc" [Ty.i64] generic_ptr
   zipWithM_ (gen_function . name_function) [0..] (functions m)
   IR.function "main" [(Ty.i32, "argc"), (Ty.ptr (Ty.ptr Ty.i8), "argv")] Ty.i32 $ \[_, _] -> do
     IR.ret $ AST.ConstantOperand $ Const.Int 32 0
