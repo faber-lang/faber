@@ -75,7 +75,8 @@ codegen m = IR.buildModule "faber-output" $ do
   _ <- IR.extern "malloc" [Ty.i64] generic_ptr
   zipWithM_ (gen_function . name_function) [0..] (functions m)
   IR.function "main" [(Ty.i32, "argc"), (Ty.ptr (Ty.ptr Ty.i8), "argv")] Ty.i32 $ \[_, _] -> do
-    IR.ret $ AST.ConstantOperand $ Const.Int 32 0
+    ret <- gen_expr [] (entrypoint m)
+    IR.ret =<< IR.bitcast ret Ty.i32
 
 to_llvm :: AST.Module -> IO Text
 to_llvm m = LLVM.withContext $ \ctx -> do

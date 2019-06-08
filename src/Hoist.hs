@@ -20,7 +20,7 @@ data Expr
 
 data Module =
   Module { functions :: [Function]
-         , entrypoint :: Function }
+         , entrypoint :: Expr }
   deriving (Show)
 
 type Hoist = State [Function]
@@ -50,6 +50,6 @@ hoist' (C.Tuple xs) = Tuple <$> mapM hoist' xs
 hoist' (C.NthOf i x) = NthOf i <$> hoist' x
 
 hoist :: C.Expr -> Module
-hoist e = Module { functions = reverse funs, entrypoint = Function e' }
+hoist e = Module { functions = reverse funs, entrypoint = e' }
   where
     (e', funs) = runState (hoist' e) []
