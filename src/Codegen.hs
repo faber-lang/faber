@@ -43,11 +43,7 @@ call_malloc len = IR.call malloc [(len, [])]
     malloc = named_function (Ty.FunctionType generic_ptr [Ty.i64] False) "malloc"
 
 gen_expr :: (IR.MonadIRBuilder m, IR.MonadModuleBuilder m) => [AST.Operand] -> Expr -> m AST.Operand
-gen_expr _    (Integer i) = do
-  m <- call_malloc $ const_int 8
-  m' <- IR.bitcast m $ Ty.ptr Ty.i64
-  IR.store m' 0 (const_int i)
-  return m
+gen_expr _    (Integer i) = IR.inttoptr (const_int i) generic_ptr
 gen_expr args (Parameter i) = return $ args !! i
 gen_expr _    (FunctionRef i) = IR.bitcast (named_function function_type $ name_function i) generic_ptr
 gen_expr args (Call f a) = do
@@ -86,7 +82,8 @@ codegen m = IR.buildModule "faber-output" $ do
   zipWithM_ (gen_function . name_function) [0..] (functions m)
   IR.function "main" [(Ty.i32, "argc"), (Ty.ptr (Ty.ptr Ty.i8), "argv")] Ty.i32 $ \[_, _] -> do
     ret <- gen_expr [] (entrypoint m)
-    IR.ret =<< flip IR.load 0 =<< IR.bitcast ret (Ty.ptr Ty.i32)
+    int <- IR.ptrtoint ret Ty.i64
+    IR.ret =<< IR.trunc int Ty.i32
 
 to_llvm :: AST.Module -> IO Text
 to_llvm m = LLVM.withContext $ \ctx -> do
