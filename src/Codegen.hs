@@ -35,8 +35,17 @@ const_int i = AST.ConstantOperand $ Const.Int 64 $ toInteger i
 named_function :: Ty.Type -> String -> AST.Operand
 named_function t = AST.ConstantOperand . Const.GlobalReference (Ty.ptr t) . AST.mkName
 
+call_malloc :: IR.MonadIRBuilder m => AST.Operand -> m AST.Operand
+call_malloc len = IR.call malloc [(len, [])]
+  where
+    malloc = named_function (Ty.FunctionType generic_ptr [Ty.i64] False) "malloc"
+
 gen_expr :: (IR.MonadIRBuilder m, IR.MonadModuleBuilder m) => [AST.Operand] -> Expr -> m AST.Operand
-gen_expr _    (Integer i) = return $ const_int i
+gen_expr _    (Integer i) = do
+  m <- call_malloc $ const_int 1
+  m' <- IR.bitcast m $ Ty.ptr Ty.i64
+  IR.store m' 0 (const_int i)
+  return m
 gen_expr args (Parameter i) = return $ args !! i
 gen_expr _    (FunctionRef i) = IR.bitcast (named_function function_type $ name_function i) generic_ptr
 gen_expr args (Call f a) = do
@@ -46,16 +55,13 @@ gen_expr args (Call f a) = do
   IR.call f' $ map (,[]) a'
 gen_expr args (Tuple xs) = do
   xs' <- mapM (gen_expr args) xs
-  m <- IR.call malloc [(const_int len, [])]
+  m <- call_malloc $ const_int $ length xs
   m <- IR.bitcast m $ Ty.ptr generic_ptr
   forM_ (zip [0..] xs') $ \(i, x) -> do
     e <- IR.gep m [const_int i]
     IR.store e 0 x
   m <- IR.bitcast m $ generic_ptr
   return m
-  where
-    len = length xs
-    malloc = named_function (Ty.FunctionType generic_ptr [Ty.i64] False) "malloc"
 gen_expr args (NthOf i e) = do
   e' <- gen_expr args e
   e' <- IR.bitcast e' $ Ty.ptr generic_ptr
@@ -76,7 +82,7 @@ codegen m = IR.buildModule "faber-output" $ do
   zipWithM_ (gen_function . name_function) [0..] (functions m)
   IR.function "main" [(Ty.i32, "argc"), (Ty.ptr (Ty.ptr Ty.i8), "argv")] Ty.i32 $ \[_, _] -> do
     ret <- gen_expr [] (entrypoint m)
-    IR.ret =<< IR.bitcast ret Ty.i32
+    IR.ret =<< flip IR.load 0 =<< IR.bitcast ret (Ty.ptr Ty.i32)
 
 to_llvm :: AST.Module -> IO Text
 to_llvm m = LLVM.withContext $ \ctx -> do
