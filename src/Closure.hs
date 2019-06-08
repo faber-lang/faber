@@ -11,7 +11,6 @@ data Expr
   | Parameter
   | Env
   | Apply Expr Expr
-  | Free String
   | BinaryOp Op.BinaryOp Expr Expr
   | SingleOp Op.SingleOp Expr
   | Tuple [Expr]
