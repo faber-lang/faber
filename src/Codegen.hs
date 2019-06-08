@@ -1,10 +1,11 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TupleSections     #-}
 
 module Codegen where
 
 import Control.Monad
 
-import Data.Text
+import Data.Text (Text)
 import Data.Text.Encoding (decodeUtf8)
 
 import qualified LLVM.AST                   as AST
@@ -22,14 +23,25 @@ import Hoist
 generic_ptr :: Ty.Type
 generic_ptr = Ty.ptr $ Ty.ptr Ty.i8
 
-gen_expr :: IR.MonadIRBuilder m => AST.Operand -> AST.Operand -> Expr -> m AST.Operand
-gen_expr env param (Integer i) = return $ AST.ConstantOperand $ Const.Int 64 $ toInteger i
--- gen_expr env param (FunctionRef i) = return $ 
+function_type :: Ty.Type
+function_type = Ty.FunctionType generic_ptr [generic_ptr, generic_ptr] False
+
+function_ptr :: Ty.Type
+function_ptr = Ty.ptr function_type
+
+gen_expr :: IR.MonadIRBuilder m => [AST.Operand] -> Expr -> m AST.Operand
+gen_expr _    (Integer i) = return $ AST.ConstantOperand $ Const.Int 64 $ toInteger i
+gen_expr args (Parameter i) = return $ args !! i
+gen_expr _    (FunctionRef i) = return $ AST.ConstantOperand $ Const.GlobalReference function_ptr $ AST.mkName $ name_function i
+gen_expr args (Call f a) = do
+  f' <- gen_expr args f
+  a' <- mapM (gen_expr args) a
+  IR.call f' $ map (,[]) a'
 
 gen_function :: IR.MonadModuleBuilder m => String -> Function -> m AST.Operand
 gen_function name (Function expr) =
-  IR.function (AST.mkName name) [(generic_ptr, "env"), (generic_ptr, "param")] generic_ptr $ \[env, param] -> do
-    IR.ret =<< gen_expr env param expr
+  IR.function (AST.mkName name) [(generic_ptr, "env"), (generic_ptr, "param")] generic_ptr $ \args -> do
+    IR.ret =<< gen_expr args expr
 
 name_function :: Int -> String
 name_function i = "__faber_fn_" ++ show i
