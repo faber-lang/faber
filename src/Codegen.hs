@@ -52,6 +52,11 @@ gen_expr args (Tuple xs) = do
   return m
   where
     len = length xs
+gen_expr args (NthOf i e) = do
+  e' <- gen_expr args e
+  e' <- IR.bitcast e' $ Ty.ptr generic_ptr
+  ptr <- IR.gep e' [const_int i]
+  IR.load ptr 0
 
 gen_function :: IR.MonadModuleBuilder m => String -> Function -> m AST.Operand
 gen_function name (Function expr) =
