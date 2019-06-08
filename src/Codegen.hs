@@ -21,7 +21,7 @@ import qualified LLVM.Context as LLVM
 import Hoist
 
 generic_ptr :: Ty.Type
-generic_ptr = Ty.ptr $ Ty.ptr Ty.i8
+generic_ptr = Ty.ptr Ty.i8
 
 function_type :: Ty.Type
 function_type = Ty.FunctionType generic_ptr [generic_ptr, generic_ptr] False
@@ -29,14 +29,29 @@ function_type = Ty.FunctionType generic_ptr [generic_ptr, generic_ptr] False
 function_ptr :: Ty.Type
 function_ptr = Ty.ptr function_type
 
-gen_expr :: IR.MonadIRBuilder m => [AST.Operand] -> Expr -> m AST.Operand
-gen_expr _    (Integer i) = return $ AST.ConstantOperand $ Const.Int 64 $ toInteger i
+const_int :: Int -> AST.Operand
+const_int i = AST.ConstantOperand $ Const.Int 64 $ toInteger i
+
+gen_expr :: (IR.MonadIRBuilder m, IR.MonadModuleBuilder m) => [AST.Operand] -> Expr -> m AST.Operand
+gen_expr _    (Integer i) = return $ const_int i
 gen_expr args (Parameter i) = return $ args !! i
 gen_expr _    (FunctionRef i) = return $ AST.ConstantOperand $ Const.GlobalReference function_ptr $ AST.mkName $ name_function i
 gen_expr args (Call f a) = do
   f' <- gen_expr args f
   a' <- mapM (gen_expr args) a
   IR.call f' $ map (,[]) a'
+gen_expr args (Tuple xs) = do
+  xs' <- mapM (gen_expr args) xs
+  malloc <- IR.extern (AST.mkName "malloc") [Ty.i64] generic_ptr
+  m <- IR.call malloc [(const_int len, [])]
+  m <- IR.bitcast m $ Ty.ptr generic_ptr
+  forM_ (zip [0..] xs') $ \(i, x) -> do
+    e <- IR.gep m [const_int i]
+    IR.store e 0 x
+  m <- IR.bitcast m $ generic_ptr
+  return m
+  where
+    len = length xs
 
 gen_function :: IR.MonadModuleBuilder m => String -> Function -> m AST.Operand
 gen_function name (Function expr) =
