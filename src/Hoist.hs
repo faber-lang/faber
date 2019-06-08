@@ -7,7 +7,6 @@ import qualified Operators as Op
 -- `Call` and `Function` directly correspond to the actual call and function
 newtype Function = Function Expr deriving (Show)
 
--- `FunctionRef` refer to `length funs - i`th function
 data Expr
   = Integer Int
   | Parameter Int
@@ -17,6 +16,11 @@ data Expr
   | SingleOp Op.SingleOp Expr
   | Tuple [Expr]
   | NthOf Int Expr
+  deriving (Show)
+
+data Module =
+  Module { functions :: [Function]
+         , entrypoint :: Function }
   deriving (Show)
 
 type Hoist = State [Function]
@@ -45,5 +49,7 @@ hoist' (C.SingleOp op x) = SingleOp op <$> hoist' x
 hoist' (C.Tuple xs) = Tuple <$> mapM hoist' xs
 hoist' (C.NthOf i x) = NthOf i <$> hoist' x
 
-hoist :: C.Expr -> (Expr, [Function])
-hoist e = runState (hoist' e) []
+hoist :: C.Expr -> Module
+hoist e = Module { functions = reverse funs, entrypoint = Function e' }
+  where
+    (e', funs) = runState (hoist' e) []

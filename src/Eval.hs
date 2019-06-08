@@ -7,7 +7,7 @@ import qualified Typing as T
 import qualified Closure as C
 import qualified Hoist as H
 
-eval :: P.Expr -> (T.Type, N.Expr, (H.Expr, [H.Function]))
+eval :: P.Expr -> (T.Type, N.Expr, H.Module)
 eval x = (t, e, c)
   where
     e = N.nameless $ D.desugar x
