@@ -15,6 +15,7 @@ data Expr
   | Lambda [Ident] Expr
   | Apply Expr Expr
   | Variable Ident
+  | Tuple [Expr]
   | BinaryOp Op.BinaryOp Expr Expr
   | SingleOp Op.SingleOp Expr
   deriving (Show)
@@ -46,6 +47,9 @@ identifier :: Parser Ident
 identifier = lexeme $ (:) <$> C.letterChar <*> many C.alphaNumChar
 
 -- expression parser
+tuple :: Parser Expr
+tuple = Tuple <$> parens (expr `sepEndBy` symbol ",")
+
 lambda :: Parser Expr
 lambda = do
   symbol "\\"
@@ -63,7 +67,8 @@ operators =
     [ InfixL (BinaryOp Op.Add <$ symbol "+") ] ]
 
 term :: Parser Expr
-term = parens expr
+term = try (parens expr)
+  <|> tuple
   <|> lambda
   <|> Variable <$> identifier
   <|> Integer <$> integer

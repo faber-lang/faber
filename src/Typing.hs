@@ -7,6 +7,7 @@ import Data.Maybe (fromJust)
 import Data.List (elemIndex)
 import Control.Monad.State
 import Control.Monad.Except
+import Control.Arrow
 
 type TVar = Int
 
@@ -14,6 +15,7 @@ data Type
   = Integer
   | Function Type Type
   | Variable TVar
+  | Tuple [Type]
   deriving (Show, Eq)
 
 newtype TypeEnv = TypeEnv [Type]
@@ -37,16 +39,21 @@ class Substitutable a where
 instance Substitutable Type where
   apply s t@(Variable i) = Map.findWithDefault t i s
   apply s (Function a b) = Function (apply s a) (apply s b)
-  apply s t = t
+  apply s (Tuple xs) = Tuple $ apply s xs
+  apply s Integer = Integer
 
   ftv (Function a b) = ftv a `Set.union` ftv b
   ftv (Variable i) = Set.singleton i
+  ftv (Tuple xs) = ftv xs
   ftv Integer = Set.empty
 
-instance Substitutable TypeEnv where
-  apply s (TypeEnv env) = TypeEnv $ map (apply s) env
+instance Substitutable a => Substitutable [a] where
+  apply = map . apply
+  ftv = foldr (Set.union . ftv) Set.empty
 
-  ftv (TypeEnv env) = foldr (Set.union . ftv) Set.empty env
+instance Substitutable TypeEnv where
+  apply s (TypeEnv env) = TypeEnv $ apply s env
+  ftv (TypeEnv env) = ftv env
 
 compose :: Subst -> Subst -> Subst
 s1 `compose` s2 = Map.map (apply s1) s2 `Map.union` s1
@@ -82,6 +89,7 @@ unify (Function a1 b1) (Function a2 b2) = do
 unify (Variable i) t = bind i t
 unify t (Variable i) = bind i t
 unify Integer Integer = return nullSubst
+unify (Tuple a) (Tuple b) = foldr compose nullSubst <$> zipWithM unify a b
 unify t1 t2 = throwError $ UnificationFail t1 t2
 
 bind :: Int -> Type -> Infer Subst
@@ -125,6 +133,7 @@ infer p env e = case e of
       (s1, ty) <- infer p env x
       s2 <- unify (apply s1 ty) op_type
       return (s2 `compose` s1, op_type)
+  N.Tuple xs -> (foldr compose nullSubst *** Tuple) <$> mapAndUnzipM (infer p env) xs
 
 typing :: N.Expr -> Either TypeError Type
 typing e = runInfer $ infer Map.empty initEnv e
