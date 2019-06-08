@@ -44,7 +44,7 @@ call_malloc len = IR.call malloc [(len, [])]
 
 gen_expr :: (IR.MonadIRBuilder m, IR.MonadModuleBuilder m) => [AST.Operand] -> Expr -> m AST.Operand
 gen_expr _    (Integer i) = do
-  m <- call_malloc $ const_int 1
+  m <- call_malloc $ const_int 8
   m' <- IR.bitcast m $ Ty.ptr Ty.i64
   IR.store m' 0 (const_int i)
   return m
@@ -59,7 +59,7 @@ gen_expr args (Call f a) = do
     pad xs = take 2 $ xs ++ repeat (AST.ConstantOperand $ Const.Null generic_ptr)
 gen_expr args (Tuple xs) = do
   xs' <- mapM (gen_expr args) xs
-  m <- call_malloc $ const_int $ length xs
+  m <- call_malloc $ const_int $ length xs * 8
   m <- IR.bitcast m $ Ty.ptr generic_ptr
   forM_ (zip [0..] xs') $ \(i, x) -> do
     e <- IR.gep m [const_int i]
