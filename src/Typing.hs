@@ -68,7 +68,7 @@ data TypeError
   = UnificationFail Type Type
   | InfiniteType Int Type
   | UnboundVariable String
-  deriving (Show)
+  deriving (Show, Eq)
 
 runInfer :: Infer (Subst, Type) -> Either TypeError Type
 runInfer m = case evalState (runExceptT m) initUnique of
