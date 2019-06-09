@@ -1,0 +1,11 @@
+module DesugarSpec (spec) where
+
+import Test.Hspec
+import qualified Desugar as D
+import qualified Parse as P
+
+spec :: Spec
+spec = do
+  describe "desugar" $ do
+    it "convert lambdas" $ do
+      D.desugar (P.Lambda ["a", "b", "c"] (P.Integer 1)) `shouldBe` D.Lambda "a" (D.Lambda "b" (D.Lambda "c" (D.Integer 1)))
