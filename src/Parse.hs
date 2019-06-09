@@ -1,7 +1,9 @@
 module Parse where
 
 import Data.Void
-import Text.Megaparsec
+import Control.Arrow
+import Text.Megaparsec hiding (ParseError)
+import Text.Megaparsec.Error (errorBundlePretty)
 import Control.Monad.Combinators.Expr
 import qualified Text.Megaparsec.Char as C
 import qualified Text.Megaparsec.Char.Lexer as L
@@ -79,3 +81,10 @@ expr = makeExprParser term operators
 -- wrap them up
 parser :: Parser Expr
 parser = between space eof expr
+
+newtype ParseError = ParseError String deriving (Show)
+
+parse_expr :: String -> String -> Either ParseError Expr
+parse_expr name input = left pretty $ parse parser name input
+  where
+    pretty = ParseError . errorBundlePretty
