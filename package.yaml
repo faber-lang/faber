@@ -53,3 +53,5 @@ tests:
     - -with-rtsopts=-N
     dependencies:
     - faber
+    - hspec
+    - hspec-discover

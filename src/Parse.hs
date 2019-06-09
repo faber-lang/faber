@@ -20,7 +20,7 @@ data Expr
   | Tuple [Expr]
   | BinaryOp Op.BinaryOp Expr Expr
   | SingleOp Op.SingleOp Expr
-  deriving (Show)
+  deriving (Show, Eq)
 
 -- parser type definition
 type Parser = Parsec Void String
