@@ -31,6 +31,20 @@ var = Variable
 -- tests
 spec :: Spec
 spec = do
+  describe "skip" $ do
+    it "skip spaces" $ do
+      parse "24 " `shouldBe` int 24
+      parse " 2 + 5 " `shouldBe` int 2 `add` int 5
+      parse "- 4" `shouldBe` neg (int 4)
+      parse " ( 24 + 12 )" `shouldBe` int 24 `add` int 12
+      parse "\\a b c => 1+a*3 " `shouldBe` Lambda ["a", "b", "c"] (int 1 `add` (var "a" `mul` int 3))
+      parse "( 1 ,2 ,3 ) " `shouldBe` Tuple [int 1, int 2, int 3]
+
+    it "skip comments" $ do
+      parse "24 /* comment */ + 23" `shouldBe` int 24 `add` int 23
+      parse "1+ /* comment */ (/*comment*/2+3)" `shouldBe` int 1 `add` (int 2 `add` int 3)
+      parse "\\abc=>\n//comment\n\\x//comment2\n=>/*comment*/x*abc" `shouldBe` Lambda ["abc"] (Lambda ["x"] (var "x" `mul` var "abc"))
+
   describe "expression" $ do
     it "parse integers" $ do
       parse "1" `shouldBe` int 1
