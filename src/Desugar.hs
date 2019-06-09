@@ -11,7 +11,7 @@ data Expr
   | BinaryOp Op.BinaryOp Expr Expr
   | SingleOp Op.SingleOp Expr
   | Tuple [Expr]
-  deriving (Show)
+  deriving (Show, Eq)
 
 desugar_lambda :: [String] -> Expr -> Expr
 desugar_lambda (x:xs) = Lambda x . desugar_lambda xs
