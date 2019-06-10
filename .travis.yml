@@ -9,8 +9,12 @@ cache:
 
 addons:
   apt:
+    sources:
+    - llvm-toolchain-xenial-8
     packages:
     - libgmp-dev
+    - llvm-8.0
+    - llvm-8.0-dev
 
 before_install:
 - mkdir -p ~/.local/bin
