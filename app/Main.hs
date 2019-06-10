@@ -1,6 +1,5 @@
 module Main where
 
-import Text.Megaparsec
 import Parse
 import Compile
 
@@ -10,6 +9,6 @@ import Data.Text.IO as TIO
 main :: IO ()
 main = do
   args <- getArgs
-  case parse parser "" (args !! 0) of
+  case parse_expr "input" (args !! 0) of
     Right e -> TIO.putStrLn =<< compile e
-    Left err -> print err
+    Left (ParseError err) -> Prelude.putStrLn err

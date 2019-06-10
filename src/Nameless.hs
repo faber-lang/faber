@@ -13,7 +13,7 @@ data Expr
   | BinaryOp Op.BinaryOp Expr Expr
   | SingleOp Op.SingleOp Expr
   | Tuple [Expr]
-  deriving (Show)
+  deriving (Show, Eq)
 
 nameless' :: [String] -> D.Expr -> Expr
 nameless' t (D.Apply fn arg) = Apply (nameless' t fn) (nameless' t arg)
