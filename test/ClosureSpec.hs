@@ -2,8 +2,8 @@ module ClosureSpec (spec) where
 
 import Test.Hspec
 
+import           Closure
 import qualified Nameless as N
-import Closure
 
 spec :: Spec
 spec = do

@@ -1,8 +1,7 @@
 module Nameless where
 
-import Data.List
-import Data.Maybe
-import qualified Desugar as D
+import           Data.List
+import qualified Desugar   as D
 import qualified Operators as Op
 
 data Expr

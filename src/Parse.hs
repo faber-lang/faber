@@ -1,13 +1,13 @@
 module Parse where
 
-import Data.Void
-import Control.Arrow
-import Text.Megaparsec hiding (ParseError)
-import Text.Megaparsec.Error (errorBundlePretty)
-import Control.Monad.Combinators.Expr
-import qualified Text.Megaparsec.Char as C
-import qualified Text.Megaparsec.Char.Lexer as L
-import qualified Operators as Op
+import           Control.Arrow
+import           Control.Monad.Combinators.Expr
+import           Data.Void
+import qualified Operators                      as Op
+import           Text.Megaparsec                hiding (ParseError)
+import qualified Text.Megaparsec.Char           as C
+import qualified Text.Megaparsec.Char.Lexer     as L
+import           Text.Megaparsec.Error          (errorBundlePretty)
 
 -- syntax tree
 type Ident = String
@@ -57,8 +57,7 @@ lambda = do
   symbol "\\"
   param <- some identifier
   symbol "=>"
-  body <- expr
-  return $ Lambda param body
+  Lambda param <$> expr
 
 operators :: [[Operator Parser Expr]]
 operators =
@@ -84,7 +83,7 @@ parser = between space eof expr
 
 newtype ParseError = ParseError String deriving (Show)
 
-parse_expr :: String -> String -> Either ParseError Expr
-parse_expr name input = left pretty $ parse parser name input
+parseExpr :: String -> String -> Either ParseError Expr
+parseExpr name input = left pretty $ parse parser name input
   where
     pretty = ParseError . errorBundlePretty

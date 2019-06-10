@@ -1,8 +1,8 @@
 module HoistSpec (spec) where
 
-import Test.Hspec
-import qualified Closure as C
-import Hoist
+import qualified Closure    as C
+import           Hoist
+import           Test.Hspec
 
 spec :: Spec
 spec = do
