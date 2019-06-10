@@ -61,8 +61,7 @@ gen_expr args b (Tuple xs) = do
   forM_ (zip [0..] xs') $ \(i, x) -> do
     e <- IR.gep m [const_int i]
     IR.store e 0 x
-  m <- IR.bitcast m $ generic_ptr
-  return m
+  IR.bitcast m $ generic_ptr
 gen_expr args b (NthOf i e) = do
   e' <- gen_expr args b e
   e' <- IR.bitcast e' $ Ty.ptr generic_ptr
@@ -73,7 +72,7 @@ gen_expr args b (LocalLet e x) = do
   gen_expr args (Just e') x
 gen_expr args (Just b) LetBound = return b
 gen_expr args Nothing LetBound = error "unbound let binding"
-gen_expr args b (BinaryOp op l r) = apply_op <$> gen_expr args b l <*> gen_expr args b r >>= id
+gen_expr args b (BinaryOp op l r) = join $ apply_op <$> gen_expr args b l <*> gen_expr args b r
   where
     apply_op a b = do
       a' <- IR.ptrtoint a Ty.i64
@@ -98,7 +97,7 @@ gen_expr args b (SingleOp op e) = apply_op =<< gen_expr args b e
 
 gen_function :: IR.MonadModuleBuilder m => String -> Function -> m AST.Operand
 gen_function name (Function expr) =
-  IR.function (AST.mkName name) [(generic_ptr, IR.NoParameterName), (generic_ptr, IR.NoParameterName)] generic_ptr $ \args -> do
+  IR.function (AST.mkName name) [(generic_ptr, IR.NoParameterName), (generic_ptr, IR.NoParameterName)] generic_ptr $ \args ->
     IR.ret =<< gen_expr args Nothing expr
 
 name_function :: Int -> String
@@ -114,5 +113,5 @@ codegen m = IR.buildModule "faber-output" $ do
     IR.ret =<< IR.trunc int Ty.i32
 
 to_llvm :: AST.Module -> IO Text
-to_llvm m = LLVM.withContext $ \ctx -> do
+to_llvm m = LLVM.withContext $ \ctx ->
   decodeUtf8 <$> LLVM.withModuleFromAST ctx m LLVM.moduleLLVMAssembly

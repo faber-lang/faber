@@ -30,7 +30,7 @@ type Hoist = State [Function]
 hoist_fun :: Expr -> Hoist Expr
 hoist_fun e = do
   modify (Function e:)
-  FunctionRef <$> pred <$> length <$> get
+  gets (FunctionRef . pred <$> length)
 
 convert_apply :: Expr -> Expr -> Hoist Expr
 convert_apply a b = return $ LocalLet a $ Call (NthOf 0 LetBound) [NthOf 1 LetBound, b]
@@ -39,7 +39,7 @@ hoist' :: C.Expr -> Hoist Expr
 -- function hoisting
 hoist' (C.Function e)      = hoist_fun =<< hoist' e
 -- closure calling convention
-hoist' (C.Apply a b)       = convert_apply <$> hoist' a <*> hoist' b >>= id
+hoist' (C.Apply a b)       = join $ convert_apply <$> hoist' a <*> hoist' b
 hoist' C.Parameter         = return $ Parameter 1
 hoist' C.Env               = return $ Parameter 0
 -- boring conversion

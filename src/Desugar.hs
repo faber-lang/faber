@@ -14,8 +14,7 @@ data Expr
   deriving (Show, Eq)
 
 desugar_lambda :: [String] -> Expr -> Expr
-desugar_lambda (x:xs) = Lambda x . desugar_lambda xs
-desugar_lambda []     = id
+desugar_lambda = flip $ foldr Lambda
 
 desugar :: P.Expr -> Expr
 desugar (P.Lambda ps body)  = desugar_lambda ps $ desugar body

@@ -57,8 +57,7 @@ lambda = do
   symbol "\\"
   param <- some identifier
   symbol "=>"
-  body <- expr
-  return $ Lambda param body
+  Lambda param <$> expr
 
 operators :: [[Operator Parser Expr]]
 operators =
