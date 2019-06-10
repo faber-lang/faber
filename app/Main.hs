@@ -10,5 +10,7 @@ main :: IO ()
 main = do
   args <- getArgs
   case parse_expr "input" (args !! 0) of
-    Right e -> TIO.putStrLn =<< compile e
+    Right e -> do
+      (_ty, ir) <- compile e
+      TIO.putStrLn ir
     Left (ParseError err) -> Prelude.putStrLn err
