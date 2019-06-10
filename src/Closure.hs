@@ -1,9 +1,9 @@
 module Closure where
 
-import Control.Monad.State
-import qualified Data.Set as Set
+import           Control.Monad.State
+import qualified Data.Set            as Set
 
-import qualified Nameless as N
+import qualified Nameless  as N
 import qualified Operators as Op
 
 data Expr

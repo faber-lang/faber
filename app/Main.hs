@@ -1,10 +1,10 @@
 module Main where
 
-import Parse
 import Compile
+import Parse
 
+import Data.Text.IO       as TIO
 import System.Environment
-import Data.Text.IO as TIO
 
 main :: IO ()
 main = do

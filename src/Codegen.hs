@@ -5,18 +5,18 @@ module Codegen where
 
 import Control.Monad
 
-import Data.Text (Text)
+import Data.Text          (Text)
 import Data.Text.Encoding (decodeUtf8)
 
 import qualified LLVM.AST                   as AST
 import qualified LLVM.AST.Constant          as Const
 import qualified LLVM.AST.Type              as Ty
+import qualified LLVM.IRBuilder.Instruction as IR
 import qualified LLVM.IRBuilder.Module      as IR
 import qualified LLVM.IRBuilder.Monad       as IR
-import qualified LLVM.IRBuilder.Instruction as IR
 
-import qualified LLVM.Module  as LLVM
 import qualified LLVM.Context as LLVM
+import qualified LLVM.Module  as LLVM
 
 import Hoist
 import Operators as Op

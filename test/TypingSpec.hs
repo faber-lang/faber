@@ -2,15 +2,15 @@ module TypingSpec (spec) where
 
 import Test.Hspec
 
-import qualified Typing as T
-import Nameless
-import Operators
+import           Nameless
+import           Operators
+import qualified Typing    as T
 
 -- helpers
 expect_error :: Expr -> String
 expect_error e = case T.typing e of
   Left err -> show err
-  Right t -> error $ "typing error is expected, but typed: " ++ show t
+  Right t  -> error $ "typing error is expected, but typed: " ++ show t
 
 add :: Expr -> Expr -> Expr
 add = BinaryOp Add

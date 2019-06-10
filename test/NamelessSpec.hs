@@ -1,8 +1,8 @@
 module NamelessSpec (spec) where
 
-import Test.Hspec
-import qualified Nameless as N
-import qualified Desugar as D
+import qualified Desugar    as D
+import qualified Nameless   as N
+import           Test.Hspec
 
 spec :: Spec
 spec = do

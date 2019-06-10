@@ -1,8 +1,8 @@
 module DesugarSpec (spec) where
 
-import Test.Hspec
-import qualified Desugar as D
-import qualified Parse as P
+import qualified Desugar    as D
+import qualified Parse      as P
+import           Test.Hspec
 
 spec :: Spec
 spec = do

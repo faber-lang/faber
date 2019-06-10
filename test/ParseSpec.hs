@@ -1,14 +1,14 @@
 module ParseSpec (spec) where
 
-import Test.Hspec
-import Parse
 import Operators
+import Parse
+import Test.Hspec
 
 -- helpers
 parse :: String -> Expr
 parse s = case parse_expr "" s of
   Left (ParseError err) -> error err
-  Right t -> t
+  Right t               -> t
 
 add :: Expr -> Expr -> Expr
 add = BinaryOp Add

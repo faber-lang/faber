@@ -1,13 +1,13 @@
 module Parse where
 
-import Data.Void
-import Control.Arrow
-import Text.Megaparsec hiding (ParseError)
-import Text.Megaparsec.Error (errorBundlePretty)
-import Control.Monad.Combinators.Expr
-import qualified Text.Megaparsec.Char as C
-import qualified Text.Megaparsec.Char.Lexer as L
-import qualified Operators as Op
+import           Control.Arrow
+import           Control.Monad.Combinators.Expr
+import           Data.Void
+import qualified Operators                      as Op
+import           Text.Megaparsec                hiding (ParseError)
+import qualified Text.Megaparsec.Char           as C
+import qualified Text.Megaparsec.Char.Lexer     as L
+import           Text.Megaparsec.Error          (errorBundlePretty)
 
 -- syntax tree
 type Ident = String

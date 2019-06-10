@@ -1,13 +1,13 @@
 module Typing where
 
-import qualified Nameless as N
-import qualified Data.Map as Map
-import qualified Data.Set as Set
-import Data.Maybe (fromJust)
-import Data.List (elemIndex)
-import Control.Monad.State
-import Control.Monad.Except
-import Control.Arrow
+import           Control.Arrow
+import           Control.Monad.Except
+import           Control.Monad.State
+import           Data.List            (elemIndex)
+import qualified Data.Map             as Map
+import           Data.Maybe           (fromJust)
+import qualified Data.Set             as Set
+import qualified Nameless             as N
 
 type TVar = Int
 
@@ -39,13 +39,13 @@ class Substitutable a where
 instance Substitutable Type where
   apply s t@(Variable i) = Map.findWithDefault t i s
   apply s (Function a b) = Function (apply s a) (apply s b)
-  apply s (Tuple xs) = Tuple $ apply s xs
-  apply s Integer = Integer
+  apply s (Tuple xs)     = Tuple $ apply s xs
+  apply s Integer        = Integer
 
   ftv (Function a b) = ftv a `Set.union` ftv b
-  ftv (Variable i) = Set.singleton i
-  ftv (Tuple xs) = ftv xs
-  ftv Integer = Set.empty
+  ftv (Variable i)   = Set.singleton i
+  ftv (Tuple xs)     = ftv xs
+  ftv Integer        = Set.empty
 
 instance Substitutable a => Substitutable [a] where
   apply = map . apply
@@ -72,7 +72,7 @@ data TypeError
 
 runInfer :: Infer (Subst, Type) -> Either TypeError Type
 runInfer m = case evalState (runExceptT m) initUnique of
-  Left err  -> Left err
+  Left err     -> Left err
   Right (_, t) -> Right t
 
 fresh :: Infer Type
