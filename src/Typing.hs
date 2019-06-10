@@ -3,9 +3,7 @@ module Typing where
 import           Control.Arrow
 import           Control.Monad.Except
 import           Control.Monad.State
-import           Data.List            (elemIndex)
 import qualified Data.Map             as Map
-import           Data.Maybe           (fromJust)
 import qualified Data.Set             as Set
 import qualified Nameless             as N
 
