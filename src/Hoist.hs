@@ -5,7 +5,7 @@ import           Control.Monad.State
 import qualified Operators           as Op
 
 -- `Call` and `Function` directly correspond to the actual call and function
-newtype Function = Function Expr deriving (Show, Eq)
+data Function = Function Int Expr deriving (Show, Eq)
 
 data Expr
   = Integer Int
@@ -29,7 +29,7 @@ type Hoist = State [Function]
 
 hoistFun :: Expr -> Hoist Expr
 hoistFun e = do
-  modify (Function e:)
+  modify (Function 2 e:)
   gets (FunctionRef . pred <$> length)
 
 convertApply :: Expr -> Expr -> Hoist Expr

@@ -93,9 +93,11 @@ genExpr args b (SingleOp op e) = apply_op =<< genExpr args b e
         Op.Positive -> return
 
 genFunction :: IR.MonadModuleBuilder m => String -> Function -> m AST.Operand
-genFunction name (Function expr) =
-  IR.function (AST.mkName name) [(genericPtr, IR.NoParameterName), (genericPtr, IR.NoParameterName)] genericPtr $ \args ->
+genFunction name (Function n expr) =
+  IR.function (AST.mkName name) params genericPtr $ \args ->
     IR.ret =<< genExpr args Nothing expr
+  where
+    params = replicate n (genericPtr, IR.NoParameterName)
 
 nameFunction :: Int -> String
 nameFunction i = "__faber_fn_" ++ show i
