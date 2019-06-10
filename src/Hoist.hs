@@ -5,7 +5,7 @@ import qualified Closure as C
 import qualified Operators as Op
 
 -- `Call` and `Function` directly correspond to the actual call and function
-newtype Function = Function Expr deriving (Show)
+newtype Function = Function Expr deriving (Show, Eq)
 
 data Expr
   = Integer Int
@@ -18,12 +18,12 @@ data Expr
   | NthOf Int Expr
   | LocalLet Expr Expr
   | LetBound
-  deriving (Show)
+  deriving (Show, Eq)
 
 data Module =
   Module { functions :: [Function]
          , entrypoint :: Expr }
-  deriving (Show)
+  deriving (Show, Eq)
 
 type Hoist = State [Function]
 
