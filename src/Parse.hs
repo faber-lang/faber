@@ -83,7 +83,7 @@ parser = between space eof expr
 
 newtype ParseError = ParseError String deriving (Show)
 
-parse_expr :: String -> String -> Either ParseError Expr
-parse_expr name input = left pretty $ parse parser name input
+parseExpr :: String -> String -> Either ParseError Expr
+parseExpr name input = left pretty $ parse parser name input
   where
     pretty = ParseError . errorBundlePretty

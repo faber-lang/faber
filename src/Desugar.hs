@@ -13,11 +13,11 @@ data Expr
   | Tuple [Expr]
   deriving (Show, Eq)
 
-desugar_lambda :: [String] -> Expr -> Expr
-desugar_lambda = flip $ foldr Lambda
+desugarLambda :: [String] -> Expr -> Expr
+desugarLambda = flip $ foldr Lambda
 
 desugar :: P.Expr -> Expr
-desugar (P.Lambda ps body)  = desugar_lambda ps $ desugar body
+desugar (P.Lambda ps body)  = desugarLambda ps $ desugar body
 desugar (P.Integer i)       = Integer i
 desugar (P.Apply a b)       = Apply (desugar a) (desugar b)
 desugar (P.Variable x)      = Variable x

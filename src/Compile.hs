@@ -13,7 +13,7 @@ import Data.Text
 
 compile :: P.Expr -> IO (T.Type, Text)
 compile x = do
-  ir <- Gen.to_llvm c
+  ir <- Gen.toLLVM c
   t' <- evaluate t
   return (t', ir)
   where

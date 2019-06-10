@@ -27,19 +27,19 @@ data Module =
 
 type Hoist = State [Function]
 
-hoist_fun :: Expr -> Hoist Expr
-hoist_fun e = do
+hoistFun :: Expr -> Hoist Expr
+hoistFun e = do
   modify (Function e:)
   gets (FunctionRef . pred <$> length)
 
-convert_apply :: Expr -> Expr -> Hoist Expr
-convert_apply a b = return $ LocalLet a $ Call (NthOf 0 LetBound) [NthOf 1 LetBound, b]
+convertApply :: Expr -> Expr -> Hoist Expr
+convertApply a b = return $ LocalLet a $ Call (NthOf 0 LetBound) [NthOf 1 LetBound, b]
 
 hoist' :: C.Expr -> Hoist Expr
 -- function hoisting
-hoist' (C.Function e)      = hoist_fun =<< hoist' e
+hoist' (C.Function e)      = hoistFun =<< hoist' e
 -- closure calling convention
-hoist' (C.Apply a b)       = join $ convert_apply <$> hoist' a <*> hoist' b
+hoist' (C.Apply a b)       = join $ convertApply <$> hoist' a <*> hoist' b
 hoist' C.Parameter         = return $ Parameter 1
 hoist' C.Env               = return $ Parameter 0
 -- boring conversion

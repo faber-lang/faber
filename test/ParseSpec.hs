@@ -6,7 +6,7 @@ import Test.Hspec
 
 -- helpers
 parse :: String -> Expr
-parse s = case parse_expr "" s of
+parse s = case parseExpr "" s of
   Left (ParseError err) -> error err
   Right t               -> t
 
