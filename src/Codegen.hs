@@ -58,7 +58,7 @@ genExpr args b (Tuple xs) = do
   forM_ (zip [0..] xs') $ \(i, x) -> do
     e <- IR.gep m [constInt i]
     IR.store e 0 x
-  IR.bitcast m $ genericPtr
+  IR.bitcast m genericPtr
 genExpr args b (NthOf i e) = do
   e' <- genExpr args b e
   e' <- IR.bitcast e' $ Ty.ptr genericPtr
