@@ -1,0 +1,30 @@
+dist: xenial
+language: generic
+sudo: false
+cache:
+  directories:
+  - $HOME/.stack
+  - $HOME/.ghc
+  - $HOME/.cabal
+
+addons:
+  apt:
+    sources:
+    - llvm-toolchain-xenial-8
+    packages:
+    - libgmp-dev
+    - llvm-8
+    - llvm-8-dev
+
+before_install:
+- mkdir -p ~/.local/bin
+- export PATH=$HOME/.local/bin:$PATH
+- travis_retry curl -L https://get.haskellstack.org/stable/linux-x86_64.tar.gz | tar xz --wildcards --strip-components=1 -C ~/.local/bin '*/stack'
+
+install:
+- stack --no-terminal --install-ghc test --only-dependencies
+- stack install hlint
+
+script:
+- hlint src
+- stack --no-terminal test
