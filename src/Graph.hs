@@ -10,6 +10,7 @@ data Graph
   = Constant Int
   | FunctionRef Int
   | Parameter Int
+  | LetBound
   | Node [Graph]
   deriving (Show, Eq)
 
@@ -38,3 +39,15 @@ data Program =
   Program { functions  :: [Function]
           , entrypoint :: Function }
   deriving (Show, Eq)
+
+buildGraph :: H.Expr -> Graph
+buildGraph (H.Integer i)       = Constant i
+buildGraph (H.FunctionRef idx) = FunctionRef idx
+buildGraph (H.Parameter n)     = Parameter n
+buildGraph (H.Call x xs)       = Node $ buildGraph x : map buildGraph xs
+buildGraph (H.BinaryOp _ a b)  = Node [buildGraph a, buildGraph b]
+buildGraph (H.SingleOp _ x)    = Node [buildGraph x]
+buildGraph (H.Tuple xs)        = Node $ map buildGraph xs
+buildGraph (H.NthOf _ e)       = Node [buildGraph e]
+buildGraph (H.LocalLet a b)    = Node [buildGraph a, buildGraph b]
+buildGraph H.LetBound          = LetBound
