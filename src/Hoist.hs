@@ -18,6 +18,10 @@ data Expr
   | NthOf Int Expr
   | LocalLet Expr Expr
   | LetBound
+  | Ref Expr
+  | Assign Expr Expr
+  | Deref Expr
+  | If Expr Expr Expr
   deriving (Show, Eq)
 
 data Module =
@@ -48,6 +52,10 @@ hoist' (C.BinaryOp op a b) = BinaryOp op <$> hoist' a <*> hoist' b
 hoist' (C.SingleOp op x)   = SingleOp op <$> hoist' x
 hoist' (C.Tuple xs)        = Tuple <$> mapM hoist' xs
 hoist' (C.NthOf i x)       = NthOf i <$> hoist' x
+hoist' (C.Ref x)           = Ref <$> hoist' x
+hoist' (C.Assign a b)      = Assign <$> hoist' a <*> hoist' b
+hoist' (C.Deref x)         = Deref <$> hoist' x
+hoist' (C.If c t e)        = If <$> hoist' c <*> hoist' t <*> hoist' e
 
 hoist :: C.Expr -> Module
 hoist e = Module { functions = reverse funs, entrypoint = e' }
