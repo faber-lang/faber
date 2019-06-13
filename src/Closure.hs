@@ -33,7 +33,7 @@ convert' (L.Bound i) = do
   return $ NthOf idx Env
   where
     -- index in outer lambda (`modify`...)
-    -- and index in environment tuple (`L.hOf`...)
+    -- and index in environment tuple (`NthOf`...)
     idx = i - 1
 convert' (L.Lambda e) = do
   t <- convert' $ L.Tuple $ map L.Bound $ Set.elems fvs
