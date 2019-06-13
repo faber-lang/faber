@@ -7,6 +7,7 @@ import qualified Hoist    as H
 import qualified Nameless as N
 import qualified Parse    as P
 import qualified Typing   as T
+import qualified Lazy     as L
 
 import Control.Exception
 import Data.Text
@@ -21,4 +22,4 @@ compile x = do
     t = case T.typing e of
           Right t  -> t
           Left err -> error $ show err
-    c = Gen.codegen $ H.hoist $ C.convert e
+    c = Gen.codegen $ H.hoist $ C.convert $ L.lazy e

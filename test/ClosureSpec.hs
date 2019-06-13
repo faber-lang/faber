@@ -3,18 +3,18 @@ module ClosureSpec (spec) where
 import Test.Hspec
 
 import           Closure
-import qualified Nameless as N
+import qualified Lazy    as L
 
 spec :: Spec
 spec = do
   describe "closure conversion" $ do
     it "convert lambdas" $ do
       -- \. 0
-      convert (N.Lambda $ N.Bound 0) `shouldBe` Tuple [Function Parameter, Tuple []]
+      convert (L.Lambda $ L.Bound 0) `shouldBe` Tuple [Function Parameter, Tuple []]
       -- \.\. 0 1
-      convert (N.Lambda (
-                N.Lambda (
-                  N.Apply (N.Bound 0) (N.Bound 1)
+      convert (L.Lambda (
+                L.Lambda (
+                  L.Apply (L.Bound 0) (L.Bound 1)
                 )
               )) `shouldBe` (
               Tuple [
@@ -33,17 +33,17 @@ spec = do
 
     it "convert lambdas with multiple occured parameter" $ do
       -- \. 0 0
-      convert (N.Lambda $ N.Apply (N.Bound 0) (N.Bound 0)) `shouldBe` Tuple [Function (Apply Parameter Parameter), Tuple []]
+      convert (L.Lambda $ L.Apply (L.Bound 0) (L.Bound 0)) `shouldBe` Tuple [Function (Apply Parameter Parameter), Tuple []]
       -- \.\. 0 1 0 1
-      convert (N.Lambda (
-                N.Lambda (
-                  N.Apply (
-                    N.Apply (
-                      N.Apply (N.Bound 0) (N.Bound 1)
+      convert (L.Lambda (
+                L.Lambda (
+                  L.Apply (
+                    L.Apply (
+                      L.Apply (L.Bound 0) (L.Bound 1)
                     )
-                    (N.Bound 0)
+                    (L.Bound 0)
                   )
-                  (N.Bound 1)
+                  (L.Bound 1)
                 )
               )) `shouldBe` (
               Tuple [
@@ -68,13 +68,13 @@ spec = do
 
     it "convert deeply nested lambdas" $ do
       -- \.\.\. 0 1 2
-      convert (N.Lambda (
-                N.Lambda (
-                  N.Lambda (
-                    N.Apply (
-                      N.Apply (N.Bound 2) (N.Bound 1)
+      convert (L.Lambda (
+                L.Lambda (
+                  L.Lambda (
+                    L.Apply (
+                      L.Apply (L.Bound 2) (L.Bound 1)
                     )
-                    (N.Bound 0)
+                    (L.Bound 0)
                   )
                 )
               )) `shouldBe` (
