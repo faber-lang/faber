@@ -23,20 +23,21 @@ data Expr
 -- - Apply a b where is_value b
 -- - bind deref'ed value in eval_thunk
 
-incr_vars :: N.Expr -> N.Expr
-incr_vars (N.Bound i)         = N.Bound $ i + 1
-incr_vars (N.Integer i)       = N.Integer i
-incr_vars (N.Lambda x)        = N.Lambda $ incr_vars x
-incr_vars (N.Apply a b)       = N.Apply (incr_vars a) (incr_vars b)
-incr_vars (N.BinaryOp op a b) = N.BinaryOp op (incr_vars a) (incr_vars b)
-incr_vars (N.SingleOp op x)   = N.SingleOp op $ incr_vars x
-incr_vars (N.Tuple xs)        = N.Tuple $ map incr_vars xs
+incr_vars :: Int -> N.Expr -> N.Expr
+incr_vars n (N.Bound i)   | i >= n    = N.Bound $ i + 1
+                          | otherwise = N.Bound i
+incr_vars n (N.Integer i)             = N.Integer i
+incr_vars n (N.Lambda x)              = N.Lambda $ incr_vars (succ n) x
+incr_vars n (N.Apply a b)             = N.Apply (incr_vars n a) (incr_vars n b)
+incr_vars n (N.BinaryOp op a b)       = N.BinaryOp op (incr_vars n a) (incr_vars n b)
+incr_vars n (N.SingleOp op x)         = N.SingleOp op $ incr_vars n x
+incr_vars n (N.Tuple xs)              = N.Tuple $ map (incr_vars n) xs
 
 make_thunk :: N.Expr -> Expr
 make_thunk e = Ref $ Tuple [Integer 0, code]
   where
     code = Lambda $ NthOf 1 $ Assign (Bound 0) updated
-    updated = Tuple [Integer 1, lazy $ incr_vars e]
+    updated = Tuple [Integer 1, lazy $ incr_vars 0 e]
 
 eval_thunk :: Int -> Expr
 eval_thunk i = If cond then_ else_
