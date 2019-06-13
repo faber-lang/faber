@@ -43,8 +43,8 @@ eval_thunk i = If cond then_ else_
   where
     v = Bound i
     cond  = NthOf 0 (Deref v)
-    then_ = Apply (NthOf 1 $ Deref v) v
-    else_ = NthOf 1 $ Deref v
+    then_ = NthOf 1 $ Deref v
+    else_ = Apply (NthOf 1 $ Deref v) v
 
 lazy :: N.Expr -> Expr
 lazy (N.Apply a b)       = Apply (lazy a) (make_thunk b)
