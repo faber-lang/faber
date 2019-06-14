@@ -1,7 +1,7 @@
 module Closure where
 
-import           Control.Monad.State
-import qualified Data.Set            as Set
+import Control.Monad.State
+import Data.List
 
 import qualified Nameless  as N
 import qualified Operators as Op
@@ -21,13 +21,19 @@ data Expr
 -- holds a set of free variables as a state
 type Convert = State [Int]
 
+update :: Int -> Convert Int
+update i = do
+  fvs <- get
+  case elemIndex (i - 1) fvs of
+    Just idx -> return idx
+    Nothing -> do
+      put $ fvs ++ [i - 1]
+      return $ length fvs
+
 -- convert a body of lambda
 convert' :: N.Expr -> Convert Expr
 convert' (N.Bound 0) = return Parameter
-convert' (N.Bound i) = do
-  modify (++[i - 1])
-  len <- length <$> get
-  return $ NthOf (len - 1) Env
+convert' (N.Bound i) = flip NthOf Env <$> update i
 convert' (N.Lambda e) = do
   t <- convert' $ N.Tuple $ map N.Bound fvs
   return $ Tuple [Function body, t]
