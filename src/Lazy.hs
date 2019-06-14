@@ -1,6 +1,6 @@
 module Lazy where
 
-import qualified Nameless as N
+import qualified Nameless  as N
 import qualified Operators as Op
 
 data Expr
@@ -19,7 +19,6 @@ data Expr
   deriving (Show, Eq)
 
 -- TODO: Add some optimizations:
--- - Apply a (Bound i)
 -- - Apply a b where is_value b
 -- - bind deref'ed value in eval_thunk
 
@@ -48,10 +47,11 @@ eval_thunk i = If cond then_ else_
     else_ = Apply (NthOf 1 $ Deref v) v
 
 lazy :: N.Expr -> Expr
-lazy (N.Apply a b)       = Apply (lazy a) (make_thunk b)
-lazy (N.Bound i)         = eval_thunk i
-lazy (N.Integer i)       = Integer i
-lazy (N.BinaryOp op a b) = BinaryOp op (lazy a) (lazy b)
-lazy (N.SingleOp op x)   = SingleOp op (lazy x)
-lazy (N.Tuple xs)        = Tuple $ map lazy xs
-lazy (N.Lambda body)     = Lambda $ lazy body
+lazy (N.Apply a (N.Bound i)) = Apply (lazy a) (Bound i)
+lazy (N.Apply a b)           = Apply (lazy a) (make_thunk b)
+lazy (N.Bound i)             = eval_thunk i
+lazy (N.Integer i)           = Integer i
+lazy (N.BinaryOp op a b)     = BinaryOp op (lazy a) (lazy b)
+lazy (N.SingleOp op x)       = SingleOp op (lazy x)
+lazy (N.Tuple xs)            = Tuple $ map lazy xs
+lazy (N.Lambda body)         = Lambda $ lazy body
