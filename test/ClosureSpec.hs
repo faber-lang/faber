@@ -85,13 +85,13 @@ spec = do
                       Tuple [
                         Function (
                           Apply (
-                            Apply (NthOf 1 Env) (NthOf 0 Env)
+                            Apply (NthOf 0 Env) (NthOf 1 Env)
                           )
                           Parameter
                         ),
                         Tuple [
-                          Parameter,
-                          NthOf 0 Env
+                          NthOf 0 Env,
+                          Parameter
                         ]
                       ]
                     ),
