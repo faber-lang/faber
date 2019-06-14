@@ -19,23 +19,20 @@ data Expr
   deriving (Show, Eq)
 
 -- holds a set of free variables as a state
-type Convert = State (Set.Set Int)
+type Convert = State [Int]
 
 -- convert a body of lambda
 convert' :: N.Expr -> Convert Expr
 convert' (N.Bound 0) = return Parameter
 convert' (N.Bound i) = do
-  modify (Set.insert idx)
-  return $ NthOf idx Env
-  where
-    -- index in outer lambda (`modify`...)
-    -- and index in environment tuple (`NthOf`...)
-    idx = i - 1
+  modify (i - 1:)
+  idx <- length <$> get
+  return $ NthOf (idx - 1) Env
 convert' (N.Lambda e) = do
-  t <- convert' $ N.Tuple $ map N.Bound $ Set.elems fvs
+  t <- convert' $ N.Tuple $ map N.Bound fvs
   return $ Tuple [Function body, t]
   where
-    (body, fvs) = runState (convert' e) Set.empty
+    (body, fvs) = runState (convert' e) []
 convert' (N.Integer i) = return $ Integer i
 convert' (N.Apply a b) = Apply <$> convert' a <*> convert' b
 convert' (N.BinaryOp op a b) = BinaryOp op <$> convert' a <*> convert' b
@@ -43,4 +40,4 @@ convert' (N.SingleOp op x) = SingleOp op <$> convert' x
 convert' (N.Tuple xs) = Tuple <$> mapM convert' xs
 
 convert :: N.Expr -> Expr
-convert e = evalState (convert' e) Set.empty
+convert e = evalState (convert' e) []
