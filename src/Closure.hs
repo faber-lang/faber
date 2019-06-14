@@ -1,7 +1,7 @@
 module Closure where
 
-import           Control.Monad.State
-import qualified Data.Set            as Set
+import Control.Monad.State
+import Data.List
 
 import qualified Lazy      as L
 import qualified Operators as Op
@@ -23,23 +23,26 @@ data Expr
   deriving (Show, Eq)
 
 -- holds a set of free variables as a state
-type Convert = State (Set.Set Int)
+type Convert = State [Int]
+
+update :: Int -> Convert Int
+update i = do
+  fvs <- get
+  case elemIndex (i - 1) fvs of
+    Just idx -> return idx
+    Nothing -> do
+      put $ fvs ++ [i - 1]
+      return $ length fvs
 
 -- convert a body of lambda
 convert' :: L.Expr -> Convert Expr
 convert' (L.Bound 0) = return Parameter
-convert' (L.Bound i) = do
-  modify (Set.insert idx)
-  return $ NthOf idx Env
-  where
-    -- index in outer lambda (`modify`...)
-    -- and index in environment tuple (`NthOf`...)
-    idx = i - 1
+convert' (L.Bound i) = flip NthOf Env <$> update i
 convert' (L.Lambda e) = do
-  t <- convert' $ L.Tuple $ map L.Bound $ Set.elems fvs
+  t <- convert' $ L.Tuple $ map L.Bound fvs
   return $ Tuple [Function body, t]
   where
-    (body, fvs) = runState (convert' e) Set.empty
+    (body, fvs) = runState (convert' e) []
 convert' (L.Integer i) = return $ Integer i
 convert' (L.Apply a b) = Apply <$> convert' a <*> convert' b
 convert' (L.BinaryOp op a b) = BinaryOp op <$> convert' a <*> convert' b
@@ -52,4 +55,4 @@ convert' (L.Deref x) = Deref <$> convert' x
 convert' (L.If c t e) = If <$> convert' c <*> convert' t <*> convert' e
 
 convert :: L.Expr -> Expr
-convert e = evalState (convert' e) Set.empty
+convert e = evalState (convert' e) []
