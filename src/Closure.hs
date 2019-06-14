@@ -25,9 +25,9 @@ type Convert = State [Int]
 convert' :: N.Expr -> Convert Expr
 convert' (N.Bound 0) = return Parameter
 convert' (N.Bound i) = do
-  modify (i - 1:)
-  idx <- length <$> get
-  return $ NthOf (idx - 1) Env
+  modify (++[i - 1])
+  len <- length <$> get
+  return $ NthOf (len - 1) Env
 convert' (N.Lambda e) = do
   t <- convert' $ N.Tuple $ map N.Bound fvs
   return $ Tuple [Function body, t]
