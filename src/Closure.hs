@@ -20,6 +20,8 @@ data Expr
   | Assign Expr Expr
   | Deref Expr
   | If Expr Expr Expr
+  | LocalLet Expr Expr
+  | LetBound
   deriving (Show, Eq)
 
 -- holds a set of free variables as a state
@@ -53,6 +55,8 @@ convert' (L.Ref x) = Ref <$> convert' x
 convert' (L.Assign a b) = Assign <$> convert' a <*> convert' b
 convert' (L.Deref x) = Deref <$> convert' x
 convert' (L.If c t e) = If <$> convert' c <*> convert' t <*> convert' e
+convert' (L.LocalLet a b) = LocalLet <$> convert' a <*> convert' b
+convert' L.LetBound = return LetBound
 
 convert :: L.Expr -> Expr
 convert e = evalState (convert' e) []

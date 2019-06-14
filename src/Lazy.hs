@@ -16,10 +16,9 @@ data Expr
   | Assign Expr Expr
   | Deref Expr
   | If Expr Expr Expr
+  | LocalLet Expr Expr
+  | LetBound
   deriving (Show, Eq)
-
--- TODO: Add some optimizations:
--- - bind deref'ed value in eval_thunk
 
 incr_vars :: Int -> N.Expr -> N.Expr
 incr_vars n (N.Bound i)   | i >= n    = N.Bound $ i + 1
@@ -41,12 +40,11 @@ make_thunk e = Ref $ Tuple [Integer 0, code]
     updated = Tuple [Integer 1, lazy $ incr_vars 0 e]
 
 eval_thunk :: Int -> Expr
-eval_thunk i = If cond then_ else_
+eval_thunk i = LocalLet (Deref $ Bound i) $ If cond then_ else_
   where
-    v = Bound i
-    cond  = NthOf 0 (Deref v)
-    then_ = NthOf 1 $ Deref v
-    else_ = Apply (NthOf 1 $ Deref v) v
+    cond  = NthOf 0 LetBound
+    then_ = NthOf 1 LetBound
+    else_ = Apply (NthOf 1 LetBound) (Bound i)
 
 is_value :: N.Expr -> Bool
 is_value (N.Integer _)      = True

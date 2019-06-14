@@ -56,6 +56,8 @@ hoist' (C.Ref x)           = Ref <$> hoist' x
 hoist' (C.Assign a b)      = Assign <$> hoist' a <*> hoist' b
 hoist' (C.Deref x)         = Deref <$> hoist' x
 hoist' (C.If c t e)        = If <$> hoist' c <*> hoist' t <*> hoist' e
+hoist' (C.LocalLet a b)    = LocalLet <$> hoist' a <*> hoist' b
+hoist' C.LetBound          = return LetBound
 
 hoist :: C.Expr -> Module
 hoist e = Module { functions = reverse funs, entrypoint = e' }
