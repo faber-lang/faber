@@ -23,7 +23,7 @@ data Expr
 incrVars :: Int -> N.Expr -> N.Expr
 incrVars n (N.Bound i)   | i >= n    = N.Bound $ i + 1
                          | otherwise = N.Bound i
-incrVars n (N.Integer i)             = N.Integer i
+incrVars _ (N.Integer i)             = N.Integer i
 incrVars n (N.Lambda x)              = N.Lambda $ incrVars (succ n) x
 incrVars n (N.Apply a b)             = N.Apply (incrVars n a) (incrVars n b)
 incrVars n (N.BinaryOp op a b)       = N.BinaryOp op (incrVars n a) (incrVars n b)
@@ -47,13 +47,13 @@ evalThunk i = LocalLet (Deref $ Bound i) $ If cond then_ else_
     else_ = Apply (NthOf 1 LetBound) (Bound i)
 
 isValue :: N.Expr -> Bool
-isValue (N.Integer _)      = True
-isValue (N.Tuple _)        = True
-isValue (N.Lambda _)       = True
-isValue (N.Apply _ _)      = False
-isValue (N.Bound _)        = False
-isValue (N.BinaryOp _ _ _) = False
-isValue (N.SingleOp _ _)   = False
+isValue N.Integer{}  = True
+isValue N.Tuple{}    = True
+isValue N.Lambda{}   = True
+isValue N.Apply{}    = False
+isValue N.Bound{}    = False
+isValue N.BinaryOp{} = False
+isValue N.SingleOp{} = False
 
 lazy :: N.Expr -> Expr
 lazy (N.Apply a (N.Bound i))      = Apply (lazy a) (Bound i)
