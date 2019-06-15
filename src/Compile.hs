@@ -4,10 +4,10 @@ import qualified Closure  as C
 import qualified Codegen  as Gen
 import qualified Desugar  as D
 import qualified Hoist    as H
+import qualified Lazy     as L
 import qualified Nameless as N
 import qualified Parse    as P
 import qualified Typing   as T
-import qualified Lazy     as L
 
 import Control.Exception
 import Data.Text
