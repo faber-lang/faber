@@ -3,7 +3,7 @@ module Closure where
 import Control.Monad.State
 import Data.List
 
-import qualified Nameless  as N
+import qualified Lazy      as L
 import qualified Operators as Op
 
 data Expr
@@ -16,6 +16,12 @@ data Expr
   | SingleOp Op.SingleOp Expr
   | Tuple [Expr]
   | NthOf Int Expr
+  | Ref Expr
+  | Assign Expr Expr
+  | Deref Expr
+  | If Expr Expr Expr
+  | LocalLet Expr Expr
+  | LetBound
   deriving (Show, Eq)
 
 -- holds a set of free variables as a state
@@ -31,19 +37,26 @@ update i = do
       return $ length fvs
 
 -- convert a body of lambda
-convert' :: N.Expr -> Convert Expr
-convert' (N.Bound 0) = return Parameter
-convert' (N.Bound i) = flip NthOf Env <$> update i
-convert' (N.Lambda e) = do
-  t <- convert' $ N.Tuple $ map N.Bound fvs
+convert' :: L.Expr -> Convert Expr
+convert' (L.Bound 0) = return Parameter
+convert' (L.Bound i) = flip NthOf Env <$> update i
+convert' (L.Lambda e) = do
+  t <- convert' $ L.Tuple $ map L.Bound fvs
   return $ Tuple [Function body, t]
   where
     (body, fvs) = runState (convert' e) []
-convert' (N.Integer i) = return $ Integer i
-convert' (N.Apply a b) = Apply <$> convert' a <*> convert' b
-convert' (N.BinaryOp op a b) = BinaryOp op <$> convert' a <*> convert' b
-convert' (N.SingleOp op x) = SingleOp op <$> convert' x
-convert' (N.Tuple xs) = Tuple <$> mapM convert' xs
+convert' (L.Integer i) = return $ Integer i
+convert' (L.Apply a b) = Apply <$> convert' a <*> convert' b
+convert' (L.BinaryOp op a b) = BinaryOp op <$> convert' a <*> convert' b
+convert' (L.SingleOp op x) = SingleOp op <$> convert' x
+convert' (L.Tuple xs) = Tuple <$> mapM convert' xs
+convert' (L.NthOf i x) = NthOf i <$> convert' x
+convert' (L.Ref x) = Ref <$> convert' x
+convert' (L.Assign a b) = Assign <$> convert' a <*> convert' b
+convert' (L.Deref x) = Deref <$> convert' x
+convert' (L.If c t e) = If <$> convert' c <*> convert' t <*> convert' e
+convert' (L.LocalLet a b) = LocalLet <$> convert' a <*> convert' b
+convert' L.LetBound = return LetBound
 
-convert :: N.Expr -> Expr
+convert :: L.Expr -> Expr
 convert e = evalState (convert' e) []

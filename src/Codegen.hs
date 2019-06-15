@@ -1,15 +1,18 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecursiveDo       #-}
 {-# LANGUAGE TupleSections     #-}
 
 module Codegen where
 
 import Control.Monad
+import Control.Monad.Fix
 
 import Data.Text          (Text)
 import Data.Text.Encoding (decodeUtf8)
 
 import qualified LLVM.AST                   as AST
 import qualified LLVM.AST.Constant          as Const
+import qualified LLVM.AST.IntegerPredicate  as P
 import qualified LLVM.AST.Type              as Ty
 import qualified LLVM.IRBuilder.Instruction as IR
 import qualified LLVM.IRBuilder.Module      as IR
@@ -40,7 +43,12 @@ callMalloc len = IR.call malloc [(len, [])]
   where
     malloc = namedFunction (Ty.FunctionType genericPtr [Ty.i64] False) "malloc"
 
-genExpr :: (IR.MonadIRBuilder m, IR.MonadModuleBuilder m) => [AST.Operand] -> Maybe AST.Operand -> Expr -> m AST.Operand
+callMalloc' :: IR.MonadIRBuilder m => AST.Operand -> m AST.Operand
+callMalloc' len = do
+  m <- callMalloc len
+  IR.bitcast m $ Ty.ptr genericPtr
+
+genExpr :: (IR.MonadIRBuilder m, IR.MonadModuleBuilder m, MonadFix m) => [AST.Operand] -> Maybe AST.Operand -> Expr -> m AST.Operand
 genExpr _    _  (Integer i) = IR.inttoptr (constInt i) genericPtr
 genExpr args _ (Parameter i) = return $ args !! i
 genExpr _    _ (FunctionRef i) = IR.bitcast (namedFunction functionType $ nameFunction i) genericPtr
@@ -53,8 +61,7 @@ genExpr args b (Call f a) = do
     pad xs = take 2 $ xs ++ repeat (AST.ConstantOperand $ Const.Null genericPtr)
 genExpr args b (Tuple xs) = do
   xs' <- mapM (genExpr args b) xs
-  m <- callMalloc $ constInt $ length xs * 8
-  m <- IR.bitcast m $ Ty.ptr genericPtr
+  m <- callMalloc' $ constInt $ length xs * 8
   forM_ (zip [0..] xs') $ \(i, x) -> do
     e <- IR.gep m [constInt i]
     IR.store e 0 x
@@ -92,10 +99,43 @@ genExpr args b (SingleOp op e) = apply_op =<< genExpr args b e
         Op.Negative -> IR.sub $ constInt 0
         Op.Positive -> return
 
-genFunction :: IR.MonadModuleBuilder m => String -> Function -> m AST.Operand
-genFunction name (Function expr) =
-  IR.function (AST.mkName name) [(genericPtr, IR.NoParameterName), (genericPtr, IR.NoParameterName)] genericPtr $ \args ->
+genExpr args b (Ref e) = do
+  e' <- genExpr args b e
+  m <- callMalloc' $ constInt 8
+  IR.store m 0 e'
+  IR.bitcast m genericPtr
+
+genExpr args b (Assign l r) = do
+  l' <- genExpr args b l
+  r' <- genExpr args b r
+  dest <- IR.bitcast l' $ Ty.ptr genericPtr
+  IR.store dest 0 r'
+  return r'
+
+genExpr args b (Deref e) = do
+  e' <- genExpr args b e
+  ptr <- IR.bitcast e' $ Ty.ptr genericPtr
+  IR.load ptr 0
+
+genExpr args b (If c t e) = mdo
+  c' <- flip IR.ptrtoint Ty.i64 =<< genExpr args b c
+  cond <- IR.icmp P.EQ c' $ constInt 0
+  IR.condBr cond ifElse ifThen
+  ifThen <- IR.block
+  t' <- genExpr args b t
+  IR.br ifExit
+  ifElse <- IR.block
+  e' <- genExpr args b e
+  IR.br ifExit
+  ifExit <- IR.block
+  IR.phi [(t', ifThen), (e', ifElse)]
+
+genFunction :: (IR.MonadModuleBuilder m, MonadFix m) => String -> Function -> m AST.Operand
+genFunction name (Function n expr) =
+  IR.function (AST.mkName name) params genericPtr $ \args ->
     IR.ret =<< genExpr args Nothing expr
+  where
+    params = replicate n (genericPtr, IR.NoParameterName)
 
 nameFunction :: Int -> String
 nameFunction i = "__faber_fn_" ++ show i

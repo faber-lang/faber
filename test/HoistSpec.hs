@@ -8,8 +8,8 @@ spec :: Spec
 spec = do
   describe "function hoisting" $ do
     it "hoist functions" $ do
-      hoist (C.Function C.Parameter) `shouldBe` Module [Function (Parameter 1)] (FunctionRef 0)
-      hoist (C.Function $ C.Function $ C.Parameter) `shouldBe` Module [Function (Parameter 1), Function (FunctionRef 0)] (FunctionRef 1)
+      hoist (C.Function C.Parameter) `shouldBe` Module [Function 2 (Parameter 1)] (FunctionRef 0)
+      hoist (C.Function $ C.Function $ C.Parameter) `shouldBe` Module [Function 2 (Parameter 1), Function 2 (FunctionRef 0)] (FunctionRef 1)
 
     it "convert function calls" $ do
       hoist (C.Apply (
@@ -18,7 +18,7 @@ spec = do
                 C.Tuple []
               ])
               (C.Integer 1)
-            ) `shouldBe` Module [Function $ Parameter 1] (
+            ) `shouldBe` Module [Function 2 $ Parameter 1] (
               LocalLet (Tuple [FunctionRef 0, Tuple []])
               (
                 Call (NthOf 0 LetBound) [NthOf 1 LetBound, Integer 1]

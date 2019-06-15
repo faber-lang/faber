@@ -5,7 +5,7 @@ import           Control.Monad.State
 import qualified Operators           as Op
 
 -- `Call` and `Function` directly correspond to the actual call and function
-newtype Function = Function Expr deriving (Show, Eq)
+data Function = Function Int Expr deriving (Show, Eq)
 
 data Expr
   = Integer Int
@@ -18,6 +18,10 @@ data Expr
   | NthOf Int Expr
   | LocalLet Expr Expr
   | LetBound
+  | Ref Expr
+  | Assign Expr Expr
+  | Deref Expr
+  | If Expr Expr Expr
   deriving (Show, Eq)
 
 data Module =
@@ -29,7 +33,7 @@ type Hoist = State [Function]
 
 hoistFun :: Expr -> Hoist Expr
 hoistFun e = do
-  modify (Function e:)
+  modify (Function 2 e:)
   gets (FunctionRef . pred <$> length)
 
 convertApply :: Expr -> Expr -> Hoist Expr
@@ -48,6 +52,12 @@ hoist' (C.BinaryOp op a b) = BinaryOp op <$> hoist' a <*> hoist' b
 hoist' (C.SingleOp op x)   = SingleOp op <$> hoist' x
 hoist' (C.Tuple xs)        = Tuple <$> mapM hoist' xs
 hoist' (C.NthOf i x)       = NthOf i <$> hoist' x
+hoist' (C.Ref x)           = Ref <$> hoist' x
+hoist' (C.Assign a b)      = Assign <$> hoist' a <*> hoist' b
+hoist' (C.Deref x)         = Deref <$> hoist' x
+hoist' (C.If c t e)        = If <$> hoist' c <*> hoist' t <*> hoist' e
+hoist' (C.LocalLet a b)    = LocalLet <$> hoist' a <*> hoist' b
+hoist' C.LetBound          = return LetBound
 
 hoist :: C.Expr -> Module
 hoist e = Module { functions = reverse funs, entrypoint = e' }
