@@ -57,8 +57,8 @@ isValue (N.SingleOp _ _)   = False
 
 lazy :: N.Expr -> Expr
 lazy (N.Apply a (N.Bound i))      = Apply (lazy a) (Bound i)
-lazy (N.Apply a b)  | isValue b   = Apply (lazy a) (makeThunk b )
-                    | otherwise   = Apply (lazy a) (makeEvaledThunk $ lazy b)
+lazy (N.Apply a b)  | isValue b   = Apply (lazy a) (makeEvaledThunk $ lazy b)
+                    | otherwise   = Apply (lazy a) (makeThunk b)
 lazy (N.Bound i)                  = evalThunk i
 lazy (N.Integer i)                = Integer i
 lazy (N.BinaryOp op a b)          = BinaryOp op (lazy a) (lazy b)
