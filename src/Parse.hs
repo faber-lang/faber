@@ -52,6 +52,9 @@ integer = lexeme L.decimal
 parens :: Parser a -> Parser a
 parens = between (symbol "(") (symbol ")")
 
+rword :: String -> Parser ()
+rword w = (lexeme . try) (C.string w *> notFollowedBy C.alphaNumChar)
+
 -- the actual parser
 identifier :: Parser Ident
 identifier = lexeme $ (:) <$> C.letterChar <*> many C.alphaNumChar
