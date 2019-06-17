@@ -96,12 +96,15 @@ definition :: Parser Def
 definition = nameDef
 
 -- wrap them up
-parser :: Parser Expr
-parser = between space eof expr
+code :: Parser Code
+code = Code <$> many definition
+
+parser :: Parser Code
+parser = between space eof code
 
 newtype ParseError = ParseError String deriving (Show)
 
-parseExpr :: String -> String -> Either ParseError Expr
-parseExpr name input = left pretty $ parse parser name input
+parseCode :: String -> String -> Either ParseError Code
+parseCode name input = left pretty $ parse parser name input
   where
     pretty = ParseError . errorBundlePretty
