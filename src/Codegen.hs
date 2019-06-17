@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleContexts  #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecursiveDo       #-}
 {-# LANGUAGE TupleSections     #-}
@@ -6,7 +7,9 @@ module Codegen where
 
 import Control.Monad
 import Control.Monad.Fix
+import Control.Monad.Reader
 
+import Data.Maybe         (fromJust)
 import Data.Text          (Text)
 import Data.Text.Encoding (decodeUtf8)
 
@@ -48,35 +51,45 @@ callMalloc' len = do
   m <- callMalloc len
   IR.bitcast m $ Ty.ptr genericPtr
 
-genExpr :: (IR.MonadIRBuilder m, IR.MonadModuleBuilder m, MonadFix m) => [AST.Operand] -> Maybe AST.Operand -> Expr -> m AST.Operand
-genExpr _    _  (Integer i) = IR.inttoptr (constInt i) genericPtr
-genExpr args _ (Parameter i) = return $ args !! i
-genExpr _    _ (FunctionRef i) = IR.bitcast (namedFunction functionType $ nameFunction i) genericPtr
-genExpr args b (Call f a) = do
-  f' <- genExpr args b f
+data Env = Env { bound :: Maybe AST.Operand, args :: [AST.Operand]}
+withBound :: AST.Operand -> Env -> Env
+withBound newBound oldEnv = oldEnv { bound = Just newBound }
+getBound :: MonadReader Env m => m AST.Operand
+getBound = fromJust . bound <$> ask
+
+initEnv :: Env
+initEnv = Env Nothing []
+initArg :: [AST.Operand] -> Env
+initArg xs = initEnv { args = xs }
+
+genExpr :: (IR.MonadIRBuilder m, IR.MonadModuleBuilder m, MonadFix m, MonadReader Env m) => Expr -> m AST.Operand
+genExpr (Integer i) = IR.inttoptr (constInt i) genericPtr
+genExpr (Parameter i) = (!! i) . args <$> ask
+genExpr (FunctionRef i) = IR.bitcast (namedFunction functionType $ nameFunction i) genericPtr
+genExpr (Call f a) = do
+  f' <- genExpr f
   f' <- IR.bitcast f' $ Ty.ptr functionType
-  a' <- mapM (genExpr args b) a
+  a' <- mapM genExpr a
   IR.call f' $ map (,[]) $ pad a'
   where
     pad xs = take 2 $ xs ++ repeat (AST.ConstantOperand $ Const.Null genericPtr)
-genExpr args b (Tuple xs) = do
-  xs' <- mapM (genExpr args b) xs
+genExpr (Tuple xs) = do
+  xs' <- mapM genExpr xs
   m <- callMalloc' $ constInt $ length xs * 8
   forM_ (zip [0..] xs') $ \(i, x) -> do
     e <- IR.gep m [constInt i]
     IR.store e 0 x
   IR.bitcast m genericPtr
-genExpr args b (NthOf i e) = do
-  e' <- genExpr args b e
+genExpr (NthOf i e) = do
+  e' <- genExpr e
   e' <- IR.bitcast e' $ Ty.ptr genericPtr
   ptr <- IR.gep e' [constInt i]
   IR.load ptr 0
-genExpr args b (LocalLet e x) = do
-  e' <- genExpr args b e
-  genExpr args (Just e') x
-genExpr args (Just b) LetBound = return b
-genExpr args Nothing LetBound = error "unbound let binding"
-genExpr args b (BinaryOp op l r) = join $ apply_op <$> genExpr args b l <*> genExpr args b r
+genExpr (LocalLet e x) = do
+  e' <- genExpr e
+  local (withBound e') $ genExpr x
+genExpr LetBound = getBound
+genExpr (BinaryOp op l r) = join $ apply_op <$> genExpr l <*> genExpr r
   where
     apply_op a b = do
       a' <- IR.ptrtoint a Ty.i64
@@ -88,7 +101,7 @@ genExpr args b (BinaryOp op l r) = join $ apply_op <$> genExpr args b l <*> genE
         Op.Add -> IR.add
         Op.Mul -> IR.mul
 
-genExpr args b (SingleOp op e) = apply_op =<< genExpr args b e
+genExpr (SingleOp op e) = apply_op =<< genExpr e
   where
     apply_op v = do
       v' <- IR.ptrtoint v Ty.i64
@@ -99,33 +112,33 @@ genExpr args b (SingleOp op e) = apply_op =<< genExpr args b e
         Op.Negative -> IR.sub $ constInt 0
         Op.Positive -> return
 
-genExpr args b (Ref e) = do
-  e' <- genExpr args b e
+genExpr (Ref e) = do
+  e' <- genExpr e
   m <- callMalloc' $ constInt 8
   IR.store m 0 e'
   IR.bitcast m genericPtr
 
-genExpr args b (Assign l r) = do
-  l' <- genExpr args b l
-  r' <- genExpr args b r
+genExpr (Assign l r) = do
+  l' <- genExpr l
+  r' <- genExpr r
   dest <- IR.bitcast l' $ Ty.ptr genericPtr
   IR.store dest 0 r'
   return r'
 
-genExpr args b (Deref e) = do
-  e' <- genExpr args b e
+genExpr (Deref e) = do
+  e' <- genExpr e
   ptr <- IR.bitcast e' $ Ty.ptr genericPtr
   IR.load ptr 0
 
-genExpr args b (If c t e) = mdo
-  c' <- flip IR.ptrtoint Ty.i64 =<< genExpr args b c
+genExpr (If c t e) = mdo
+  c' <- flip IR.ptrtoint Ty.i64 =<< genExpr c
   cond <- IR.icmp P.EQ c' $ constInt 0
   IR.condBr cond ifElse ifThen
   ifThen <- IR.block
-  t' <- genExpr args b t
+  t' <- genExpr t
   IR.br ifExit
   ifElse <- IR.block
-  e' <- genExpr args b e
+  e' <- genExpr e
   IR.br ifExit
   ifExit <- IR.block
   IR.phi [(t', ifThen), (e', ifElse)]
@@ -133,7 +146,7 @@ genExpr args b (If c t e) = mdo
 genFunction :: (IR.MonadModuleBuilder m, MonadFix m) => String -> Function -> m AST.Operand
 genFunction name (Function n expr) =
   IR.function (AST.mkName name) params genericPtr $ \args ->
-    IR.ret =<< genExpr args Nothing expr
+    IR.ret =<< runReaderT (genExpr expr) (initArg args)
   where
     params = replicate n (genericPtr, IR.NoParameterName)
 
@@ -145,7 +158,7 @@ codegen m = IR.buildModule "faber-output" $ do
   _ <- IR.extern "malloc" [Ty.i64] genericPtr
   zipWithM_ (genFunction . nameFunction) [0..] (functions m)
   IR.function "main" [(Ty.i32, "argc"), (Ty.ptr (Ty.ptr Ty.i8), "argv")] Ty.i32 $ \[_, _] -> do
-    ret <- genExpr [] Nothing (entrypoint m)
+    ret <- runReaderT (genExpr $ entrypoint m) initEnv
     int <- IR.ptrtoint ret Ty.i64
     IR.ret =<< IR.trunc int Ty.i32
 
