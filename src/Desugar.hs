@@ -13,14 +13,30 @@ data Expr
   | Tuple [Expr]
   deriving (Show, Eq)
 
+data DefBody
+  = Name Expr
+
+data Def = Def String DefBody
+
+type Code = [Def]
+
 desugarLambda :: [String] -> Expr -> Expr
 desugarLambda = flip $ foldr Lambda
 
-desugar :: P.Expr -> Expr
-desugar (P.Lambda ps body)  = desugarLambda ps $ desugar body
-desugar (P.Integer i)       = Integer i
-desugar (P.Apply a b)       = Apply (desugar a) (desugar b)
-desugar (P.Variable x)      = Variable x
-desugar (P.BinaryOp op a b) = BinaryOp op (desugar a) (desugar b)
-desugar (P.SingleOp op x)   = SingleOp op $ desugar x
-desugar (P.Tuple xs)        = Tuple $ map desugar xs
+desugarExpr :: P.Expr -> Expr
+desugarExpr (P.Lambda ps body)  = desugarLambda ps $ desugarExpr body
+desugarExpr (P.Integer i)       = Integer i
+desugarExpr (P.Apply a b)       = Apply (desugarExpr a) (desugarExpr b)
+desugarExpr (P.Variable x)      = Variable x
+desugarExpr (P.BinaryOp op a b) = BinaryOp op (desugarExpr a) (desugarExpr b)
+desugarExpr (P.SingleOp op x)   = SingleOp op $ desugarExpr x
+desugarExpr (P.Tuple xs)        = Tuple $ map desugarExpr xs
+
+desugarDefBody :: P.DefBody -> DefBody
+desugarDefBody (P.Name ps body) = Name $ desugarLambda ps $ desugarExpr body
+
+desugarDef :: P.Def -> Def
+desugarDef (P.Def name body) = Def name $ desugarDefBody body
+
+desugar :: P.Code -> Code
+desugar = map desugarDef
