@@ -22,6 +22,13 @@ data Expr
   | SingleOp Op.SingleOp Expr
   deriving (Show, Eq)
 
+data DefBody
+  = Name [Ident] Expr
+
+data Def = Def String DefBody
+
+newtype Code = Code [Def]
+
 -- parser type definition
 type Parser = Parsec Void String
 
