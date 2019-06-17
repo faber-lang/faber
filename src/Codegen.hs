@@ -52,8 +52,10 @@ callMalloc' len = do
   IR.bitcast m $ Ty.ptr genericPtr
 
 data Env = Env { bound :: Maybe AST.Operand, args :: [AST.Operand]}
-withBound :: AST.Operand -> Env -> Env
-withBound newBound oldEnv = oldEnv { bound = Just newBound }
+withBound :: MonadReader Env m => AST.Operand -> m AST.Operand -> m AST.Operand
+withBound newBound = local update
+  where
+    update x = x { bound = Just newBound }
 getBound :: MonadReader Env m => m AST.Operand
 getBound = fromJust . bound <$> ask
 
@@ -87,7 +89,7 @@ genExpr (NthOf i e) = do
   IR.load ptr 0
 genExpr (LocalLet e x) = do
   e' <- genExpr e
-  local (withBound e') $ genExpr x
+  withBound e' $ genExpr x
 genExpr LetBound = getBound
 genExpr (BinaryOp op l r) = join $ apply_op <$> genExpr l <*> genExpr r
   where
