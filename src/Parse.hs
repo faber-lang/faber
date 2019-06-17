@@ -84,6 +84,17 @@ term = try (parens expr)
 expr :: Parser Expr
 expr = makeExprParser term operators
 
+-- definition parser
+nameDef :: Parser Def
+nameDef = do
+  name <- identifier
+  params <- many identifier
+  symbol "="
+  Def name . Name params <$> expr
+
+definition :: Parser Def
+definition = nameDef
+
 -- wrap them up
 parser :: Parser Expr
 parser = between space eof expr
