@@ -27,7 +27,7 @@ data DefBody
 
 data Def = Def String DefBody
 
-newtype Code = Code [Def]
+type Code = [Def]
 
 -- parser type definition
 type Parser = Parsec Void String
@@ -97,7 +97,7 @@ definition = nameDef
 
 -- wrap them up
 code :: Parser Code
-code = Code <$> many definition
+code = many definition
 
 parser :: Parser Code
 parser = between space eof code
