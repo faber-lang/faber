@@ -75,11 +75,10 @@ initInferState :: InferState
 initInferState = InferState initUnique initEnv
 
 type Infer = ExceptT TypeError (State InferState)
-updateUnique :: (Unique -> Unique) -> Infer Unique
-updateUnique f = do
-  old <- get
-  modify update
-  return old
+getUnique :: Infer Unique
+getUnique = gets unique
+updateUnique :: (Unique -> Unique) -> Infer ()
+updateUnique f = modify update
   where
     update (InferState u e) = InferState (f u) e
 
@@ -96,7 +95,8 @@ runInfer m = case evalState (runExceptT m) initInferState of
 
 fresh :: Infer Type
 fresh = do
-  (Unique i) <- updateUnique incrUnique
+  (Unique i) <- getUnique
+  updateUnique incrUnique
   return $ Variable i
 
 unify :: Type -> Type -> Infer Subst
