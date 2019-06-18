@@ -16,14 +16,20 @@ data Type
   | Tuple [Type]
   deriving (Show, Eq)
 
-newtype TypeEnv = TypeEnv [Type]
+data TypeEnv =
+  TypeEnv { params = [Type]
+          , globals = Map.Map String Type }
 
 initEnv :: TypeEnv
-initEnv = TypeEnv []
-lookupEnv :: TypeEnv -> TVar -> Type
-lookupEnv (TypeEnv env) = (env !!)
-appendEnv :: TypeEnv -> Type -> TypeEnv
-appendEnv (TypeEnv env) = TypeEnv . (: env)
+initEnv = TypeEnv [] Map.empty
+lookupParam :: TypeEnv -> TVar -> Type
+lookupParam (TypeEnv env _)  = (env !!)
+lookupGlobal :: TypeEnv -> String -> Type
+lookupGlobal name (TypeEnv _ env) = fromJust . Map.lookup name env
+appendParam :: TypeEnv -> Type -> TypeEnv
+appendParam (TypeEnv ps gs) t = TypeEnv (t:ps) gs
+appendGlobal :: TypeEnv -> String -> Type -> TypeEnv
+appendGlobal (TypeEnv ps gs) k v = TypeEnv ps $ Map.insert k v gs
 
 type Subst = Map.Map TVar Type
 
@@ -50,8 +56,8 @@ instance Substitutable a => Substitutable [a] where
   ftv = foldr (Set.union . ftv) Set.empty
 
 instance Substitutable TypeEnv where
-  apply s (TypeEnv env) = TypeEnv $ apply s env
-  ftv (TypeEnv env) = ftv env
+  apply s (TypeEnv ps gs) = TypeEnv $ apply s ps $ Map.map (apply s) gs
+  ftv (TypeEnv ps gs) = ftv ps `Set.union` ftv $ Map.elems gs
 
 compose :: Subst -> Subst -> Subst
 s1 `compose` s2 = Map.map (apply s1) s2 `Map.union` s1
@@ -98,13 +104,14 @@ bind i t | t == Variable i = return nullSubst
 occursCheck :: Substitutable a => Int -> a -> Bool
 occursCheck i t = i `Set.member` ftv t
 
-infer :: TypeEnv -> N.Expr -> Infer (Subst, Type)
-infer env e = case e of
-  N.Bound i -> return (nullSubst, lookupEnv env i)
+inferExpr :: TypeEnv -> N.Expr -> Infer (Subst, Type)
+inferExpr env e = case e of
+  N.ParamBound i -> return (nullSubst, lookupParam env i)
+  N.GlobalBound name -> return (nullSubst, lookupGlobal env name)
   N.Integer _ -> return (nullSubst, Integer)
   N.Lambda body -> do
     tv <- fresh
-    (s, ret) <- infer (appendEnv env tv) body
+    (s, ret) <- infer (appendParam tv) body
     return (s, Function (apply s tv) ret)
   N.Apply a b -> do
     tv <- fresh
