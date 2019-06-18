@@ -65,8 +65,23 @@ s1 `compose` s2 = Map.map (apply s1) s2 `Map.union` s1
 newtype Unique = Unique Int
 initUnique :: Unique
 initUnique = Unique 0
+incrUnique :: Unique -> Unique
+incrUnique (Unique i) = Unique $ i + 1
 
-type Infer = ExceptT TypeError (State Unique)
+data InferState =
+  InferState { unique :: Unique
+             , env :: TypeEnv }
+initInferState :: InferState
+initInferState = InferState initUnique initEnv
+
+type Infer = ExceptT TypeError (State InferState)
+updateUnique :: (Unique -> Unique) -> Infer Unique
+updateUnique f = do
+  old <- get
+  modify update
+  return old
+  where
+    update (InferState u e) = InferState (f u) e
 
 data TypeError
   = UnificationFail Type Type
@@ -75,14 +90,13 @@ data TypeError
   deriving (Show, Eq)
 
 runInfer :: Infer (Subst, Type) -> Either TypeError Type
-runInfer m = case evalState (runExceptT m) initUnique of
+runInfer m = case evalState (runExceptT m) initInferState of
   Left err     -> Left err
   Right (_, t) -> Right t
 
 fresh :: Infer Type
 fresh = do
-  (Unique i) <- get
-  put $ Unique $ i + 1
+  (Unique i) <- updateUnique incrUnique
   return $ Variable i
 
 unify :: Type -> Type -> Infer Subst
