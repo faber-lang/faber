@@ -65,24 +65,24 @@ isValue N.GlobalBound{} = False
 isValue N.BinaryOp{}    = False
 isValue N.SingleOp{}    = False
 
+lazify :: N.Expr -> Expr
+lazify (N.ParamBound i)  = ParamBound i
+lazify (N.GlobalBound s) = GlobalBound s
+lazify x | isValue x     = makeEvaledThunk $ lazyExpr x
+         | otherwise     = makeThunk x
+
 lazyExpr :: N.Expr -> Expr
-lazyExpr (N.Apply a (N.ParamBound i))  = Apply (lazyExpr a) (ParamBound i)
-lazyExpr (N.Apply a (N.GlobalBound s)) = Apply (lazyExpr a) (GlobalBound s)
-lazyExpr (N.Apply a b)  | isValue b    = Apply (lazyExpr a) (makeEvaledThunk $ lazyExpr b)
-                        | otherwise    = Apply (lazyExpr a) (makeThunk b)
-lazyExpr (N.ParamBound i)              = evalThunk (ParamBound i)
-lazyExpr (N.GlobalBound s)             = evalThunk (GlobalBound s)
-lazyExpr (N.Integer i)                 = Integer i
-lazyExpr (N.BinaryOp op a b)           = BinaryOp op (lazyExpr a) (lazyExpr b)
-lazyExpr (N.SingleOp op x)             = SingleOp op (lazyExpr x)
-lazyExpr (N.Tuple xs)                  = Tuple $ map lazyExpr xs
-lazyExpr (N.Lambda body)               = Lambda $ lazyExpr body
+lazyExpr (N.Apply a b)       = Apply (lazyExpr a) (lazify b)
+lazyExpr (N.ParamBound i)    = evalThunk (ParamBound i)
+lazyExpr (N.GlobalBound s)   = evalThunk (GlobalBound s)
+lazyExpr (N.Integer i)       = Integer i
+lazyExpr (N.BinaryOp op a b) = BinaryOp op (lazyExpr a) (lazyExpr b)
+lazyExpr (N.SingleOp op x)   = SingleOp op (lazyExpr x)
+lazyExpr (N.Tuple xs)        = Tuple $ map lazyExpr xs
+lazyExpr (N.Lambda body)     = Lambda $ lazyExpr body
 
 lazyDefBody :: N.DefBody -> DefBody
-lazyDefBody (N.Name (N.ParamBound i))  = Name (ParamBound i)
-lazyDefBody (N.Name (N.GlobalBound i)) = Name (GlobalBound i)
-lazyDefBody (N.Name x)  | isValue x    = Name $ makeEvaledThunk $ lazyExpr x
-                        | otherwise    = Name $ makeThunk x
+lazyDefBody (N.Name x) = Name $ lazify x
 
 lazyDef :: N.Def -> Def
 lazyDef (N.Def name body) = Def name $ lazyDefBody body
