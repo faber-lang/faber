@@ -17,8 +17,8 @@ data Type
   deriving (Show, Eq)
 
 data TypeEnv =
-  TypeEnv { params = [Type]
-          , globals = Map.Map String Type }
+  TypeEnv { params  :: [Type]
+          , globals :: Map.Map String Type }
 
 initEnv :: TypeEnv
 initEnv = TypeEnv [] Map.empty
@@ -70,7 +70,7 @@ incrUnique (Unique i) = Unique $ i + 1
 
 data InferState =
   InferState { unique :: Unique
-             , env :: TypeEnv }
+             , env    :: TypeEnv }
 initInferState :: InferState
 initInferState = InferState initUnique initEnv
 
