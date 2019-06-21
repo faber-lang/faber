@@ -101,6 +101,9 @@ findGlobal s = do
 withParam :: Type -> Infer a -> Infer a
 withParam = local . flip appendParam
 
+withSubst :: Subst -> Infer a -> Infer a
+withSubst = local . apply
+
 unify :: Type -> Type -> Infer Subst
 unify (Function a1 b1) (Function a2 b2) = do
   s_a <- unify a1 a2
@@ -132,14 +135,14 @@ inferExpr e = case e of
   N.Apply a b -> do
     tv <- fresh
     (s1, a_ty) <- inferExpr a
-    (s2, b_ty) <- local (apply s1) $ inferExpr b
+    (s2, b_ty) <- withSubst s1 $ inferExpr b
     s3 <- unify (apply s2 a_ty) (Function b_ty tv)
     return (s3 `compose` s2 `compose` s1, apply s3 tv)
   N.BinaryOp op a b ->
     let op_type = Integer in
     do
       (s1, a_ty) <- inferExpr a
-      (s2, b_ty) <- local (apply s1) $ inferExpr b
+      (s2, b_ty) <- withSubst s1 $ inferExpr b
       s3 <- unify (apply s2 a_ty) op_type
       s4 <- unify (apply s3 b_ty) op_type
       return (s4 `compose` s3 `compose` s2 `compose` s1, op_type)
