@@ -5,7 +5,6 @@ import           Control.Monad.Except
 import           Control.Monad.Reader
 import           Control.Monad.State
 import qualified Data.Map             as Map
-import           Data.Maybe           (fromJust)
 import qualified Data.Set             as Set
 import qualified Nameless             as N
 
@@ -26,8 +25,8 @@ initEnv :: TypeEnv
 initEnv = TypeEnv [] Map.empty
 lookupParam :: TypeEnv -> TVar -> Type
 lookupParam (TypeEnv env _)  = (env !!)
-lookupGlobal :: TypeEnv -> String -> Type
-lookupGlobal (TypeEnv _ env) = fromJust . flip Map.lookup env
+lookupGlobal :: TypeEnv -> String -> Maybe Type
+lookupGlobal (TypeEnv _ env) = flip Map.lookup env
 appendParam :: TypeEnv -> Type -> TypeEnv
 appendParam (TypeEnv ps gs) t = TypeEnv (t:ps) gs
 appendGlobal :: TypeEnv -> String -> Type -> TypeEnv
@@ -97,7 +96,7 @@ findParam i = do
 findGlobal :: String -> Infer Type
 findGlobal s = do
   env <- ask
-  return $ lookupGlobal env s
+  maybe (throwError $ UnboundVariable s) return $ lookupGlobal env s
 
 withParam :: Type -> Infer a -> Infer a
 withParam = local . flip appendParam
