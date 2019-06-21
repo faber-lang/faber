@@ -2,8 +2,10 @@ module Typing where
 
 import           Control.Arrow
 import           Control.Monad.Except
+import           Control.Monad.Reader
 import           Control.Monad.State
 import qualified Data.Map             as Map
+import           Data.Maybe           (fromJust)
 import qualified Data.Set             as Set
 import qualified Nameless             as N
 
@@ -25,7 +27,7 @@ initEnv = TypeEnv [] Map.empty
 lookupParam :: TypeEnv -> TVar -> Type
 lookupParam (TypeEnv env _)  = (env !!)
 lookupGlobal :: TypeEnv -> String -> Type
-lookupGlobal name (TypeEnv _ env) = fromJust . Map.lookup name env
+lookupGlobal (TypeEnv _ env) = fromJust . flip Map.lookup env
 appendParam :: TypeEnv -> Type -> TypeEnv
 appendParam (TypeEnv ps gs) t = TypeEnv (t:ps) gs
 appendGlobal :: TypeEnv -> String -> Type -> TypeEnv
@@ -56,8 +58,8 @@ instance Substitutable a => Substitutable [a] where
   ftv = foldr (Set.union . ftv) Set.empty
 
 instance Substitutable TypeEnv where
-  apply s (TypeEnv ps gs) = TypeEnv $ apply s ps $ Map.map (apply s) gs
-  ftv (TypeEnv ps gs) = ftv ps `Set.union` ftv $ Map.elems gs
+  apply s (TypeEnv ps gs) = TypeEnv (apply s ps) (Map.map (apply s) gs)
+  ftv (TypeEnv ps gs) = ftv ps `Set.union` ftv (Map.elems gs)
 
 compose :: Subst -> Subst -> Subst
 s1 `compose` s2 = Map.map (apply s1) s2 `Map.union` s1
@@ -68,19 +70,7 @@ initUnique = Unique 0
 incrUnique :: Unique -> Unique
 incrUnique (Unique i) = Unique $ i + 1
 
-data InferState =
-  InferState { unique :: Unique
-             , env    :: TypeEnv }
-initInferState :: InferState
-initInferState = InferState initUnique initEnv
-
-type Infer = ExceptT TypeError (State InferState)
-getUnique :: Infer Unique
-getUnique = gets unique
-updateUnique :: (Unique -> Unique) -> Infer ()
-updateUnique f = modify update
-  where
-    update (InferState u e) = InferState (f u) e
+type Infer = ExceptT TypeError (ReaderT TypeEnv (State Unique))
 
 data TypeError
   = UnificationFail Type Type
@@ -89,15 +79,28 @@ data TypeError
   deriving (Show, Eq)
 
 runInfer :: Infer (Subst, Type) -> Either TypeError Type
-runInfer m = case evalState (runExceptT m) initInferState of
+runInfer m = case evalState (runReaderT (runExceptT m) initEnv) initUnique of
   Left err     -> Left err
   Right (_, t) -> Right t
 
 fresh :: Infer Type
 fresh = do
-  (Unique i) <- getUnique
-  updateUnique incrUnique
+  (Unique i) <- get
+  modify incrUnique
   return $ Variable i
+
+findParam :: Int -> Infer Type
+findParam i = do
+  env <- ask
+  return $ lookupParam env i
+
+findGlobal :: String -> Infer Type
+findGlobal s = do
+  env <- ask
+  return $ lookupGlobal env s
+
+withParam :: Type -> Infer a -> Infer a
+withParam = local . flip appendParam
 
 unify :: Type -> Type -> Infer Subst
 unify (Function a1 b1) (Function a2 b2) = do
@@ -118,36 +121,36 @@ bind i t | t == Variable i = return nullSubst
 occursCheck :: Substitutable a => Int -> a -> Bool
 occursCheck i t = i `Set.member` ftv t
 
-inferExpr :: TypeEnv -> N.Expr -> Infer (Subst, Type)
-inferExpr env e = case e of
-  N.ParamBound i -> return (nullSubst, lookupParam env i)
-  N.GlobalBound name -> return (nullSubst, lookupGlobal env name)
+inferExpr :: N.Expr -> Infer (Subst, Type)
+inferExpr e = case e of
+  N.ParamBound i -> (,) nullSubst <$> findParam i
+  N.GlobalBound name -> (,) nullSubst <$> findGlobal name
   N.Integer _ -> return (nullSubst, Integer)
   N.Lambda body -> do
     tv <- fresh
-    (s, ret) <- infer (appendParam tv) body
+    (s, ret) <- withParam tv $ inferExpr body
     return (s, Function (apply s tv) ret)
   N.Apply a b -> do
     tv <- fresh
-    (s1, a_ty) <- infer env a
-    (s2, b_ty) <- infer (apply s1 env) b
+    (s1, a_ty) <- inferExpr a
+    (s2, b_ty) <- local (apply s1) $ inferExpr b
     s3 <- unify (apply s2 a_ty) (Function b_ty tv)
     return (s3 `compose` s2 `compose` s1, apply s3 tv)
   N.BinaryOp op a b ->
     let op_type = Integer in
     do
-      (s1, a_ty) <- infer env a
-      (s2, b_ty) <- infer (apply s1 env) b
+      (s1, a_ty) <- inferExpr a
+      (s2, b_ty) <- local (apply s1) $ inferExpr b
       s3 <- unify (apply s2 a_ty) op_type
       s4 <- unify (apply s3 b_ty) op_type
       return (s4 `compose` s3 `compose` s2 `compose` s1, op_type)
   N.SingleOp op x ->
     let op_type = Integer in
     do
-      (s1, ty) <- infer env x
+      (s1, ty) <- inferExpr x
       s2 <- unify (apply s1 ty) op_type
       return (s2 `compose` s1, op_type)
-  N.Tuple xs -> (foldr compose nullSubst *** Tuple) <$> mapAndUnzipM (infer env) xs
+  N.Tuple xs -> (foldr compose nullSubst *** Tuple) <$> mapAndUnzipM inferExpr xs
 
 typing :: N.Expr -> Either TypeError Type
-typing = runInfer . infer initEnv
+typing = runInfer . inferExpr
