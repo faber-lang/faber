@@ -8,10 +8,12 @@ module Codegen where
 import Control.Monad
 import Control.Monad.Fix
 import Control.Monad.Reader
+import Control.Monad.State
 
-import Data.Maybe         (fromJust)
-import Data.Text          (Text)
-import Data.Text.Encoding (decodeUtf8)
+import qualified Data.Map           as Map
+import           Data.Maybe         (fromJust)
+import           Data.Text          (Text)
+import           Data.Text.Encoding (decodeUtf8)
 
 import qualified LLVM.AST                   as AST
 import qualified LLVM.AST.Constant          as Const
@@ -67,6 +69,7 @@ initArg xs = initEnv { args = xs }
 genExpr :: (IR.MonadIRBuilder m, IR.MonadModuleBuilder m, MonadFix m, MonadReader Env m) => Expr -> m AST.Operand
 genExpr (Integer i) = IR.inttoptr (constInt i) genericPtr
 genExpr (Parameter i) = (!! i) . args <$> ask
+genExpr (NameRef name) = error $ "Invalid reference to \"" ++ name ++ "\""
 genExpr (FunctionRef i) = IR.bitcast (namedFunction functionType $ nameFunction i) genericPtr
 genExpr (Call f a) = do
   f' <- genExpr f
@@ -152,6 +155,23 @@ genFunction name (Function n expr) =
   where
     params = replicate n (genericPtr, IR.NoParameterName)
 
+type NameMap = Map.Map String AST.Operand
+
+initNameMap :: NameMap
+initNameMap = Map.empty
+
+genTopExpr :: (IR.MonadIRBuilder m, IR.MonadModuleBuilder m, MonadFix m, MonadState NameMap m) => Expr -> m AST.Operand
+genTopExpr (NameRef name) = gets (Map.! name)
+genTopExpr e              = runReaderT (genExpr e) initEnv
+
+genDef :: (IR.MonadIRBuilder m, IR.MonadModuleBuilder m, MonadFix m, MonadState NameMap m) => Def -> m ()
+genDef (Def name (Name body)) = do
+  e <- genTopExpr body
+  modify $ Map.insert name e
+
+genCode :: (IR.MonadIRBuilder m, IR.MonadModuleBuilder m, MonadFix m) => Code -> m NameMap
+genCode c = execStateT (mapM_ genDef c) initNameMap
+
 nameFunction :: Int -> String
 nameFunction i = "__faber_fn_" ++ show i
 
@@ -160,9 +180,10 @@ codegen m = IR.buildModule "faber-output" $ do
   _ <- IR.extern "malloc" [Ty.i64] genericPtr
   zipWithM_ (genFunction . nameFunction) [0..] (functions m)
   IR.function "main" [(Ty.i32, "argc"), (Ty.ptr (Ty.ptr Ty.i8), "argv")] Ty.i32 $ \[_, _] -> do
-    ret <- runReaderT (genExpr $ entrypoint m) initEnv
-    int <- IR.ptrtoint ret Ty.i64
-    IR.ret =<< IR.trunc int Ty.i32
+    names <- genCode $ code m
+    let ret = names Map.! "main" in do
+      int <- IR.ptrtoint ret Ty.i64
+      IR.ret =<< IR.trunc int Ty.i32
 
 toLLVM :: AST.Module -> IO Text
 toLLVM m = LLVM.withContext $ \ctx ->
