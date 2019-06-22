@@ -9,7 +9,7 @@ import System.Environment
 main :: IO ()
 main = do
   args <- getArgs
-  case parseExpr "input" (args !! 0) of
+  case parseCode "input" (args !! 0) of
     Right e -> do
       ir <- compile e
       TIO.putStrLn ir
