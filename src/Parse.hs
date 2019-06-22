@@ -20,6 +20,7 @@ data Expr
   | Tuple [Expr]
   | BinaryOp Op.BinaryOp Expr Expr
   | SingleOp Op.SingleOp Expr
+  | LetIn [Def] Expr
   deriving (Show, Eq)
 
 data DefBody
@@ -70,6 +71,13 @@ lambda = do
   symbol "=>"
   Lambda param <$> expr
 
+letIn :: Parser Expr
+letIn = do
+  rword "let"
+  defs <- definitions
+  rword "in"
+  LetIn defs <$> expr
+
 operators :: [[Operator Parser Expr]]
 operators =
   [ [ InfixL (Apply <$ symbol "") ],
@@ -80,6 +88,7 @@ operators =
 
 term :: Parser Expr
 term = try (parens expr)
+  <|> letIn
   <|> tuple
   <|> lambda
   <|> Variable <$> identifier
