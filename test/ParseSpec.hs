@@ -6,9 +6,12 @@ import Test.Hspec
 
 -- helpers
 parse :: String -> Expr
-parse s = case parseExpr "" s of
+parse s = case parseCode "" code of
   Left (ParseError err) -> error err
-  Right t               -> t
+  Right t               -> destruct t
+  where
+    code = "main = " ++ s ++ ";;"
+    destruct [Def _ (Name [] body)] = body
 
 add :: Expr -> Expr -> Expr
 add = BinaryOp Add

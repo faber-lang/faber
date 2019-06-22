@@ -1,22 +1,27 @@
 module NamelessSpec (spec) where
 
+import Control.Monad.Reader
+
 import qualified Desugar    as D
 import qualified Nameless   as N
 import           Test.Hspec
+
+namelessExpr :: D.Expr -> N.Expr
+namelessExpr e = runReader (N.namelessExpr e) N.initEnv
 
 spec :: Spec
 spec = do
   describe "basic conversion" $ do
     it "convert variable indices" $ do
-      N.nameless (D.Lambda "x" (D.Variable "x")) `shouldBe` N.Lambda (N.Bound 0)
-      N.nameless (D.Lambda "x" (D.Lambda "y" (D.Variable "x"))) `shouldBe` N.Lambda (N.Lambda (N.Bound 1))
+      namelessExpr (D.Lambda "x" (D.Variable "x")) `shouldBe` N.Lambda (N.ParamBound 0)
+      namelessExpr (D.Lambda "x" (D.Lambda "y" (D.Variable "x"))) `shouldBe` N.Lambda (N.Lambda (N.ParamBound 1))
 
     it "convert shadowing names" $ do
-      N.nameless (D.Lambda "x" (D.Lambda "x" (D.Variable "x"))) `shouldBe` N.Lambda (N.Lambda (N.Bound 0))
+      namelessExpr (D.Lambda "x" (D.Lambda "x" (D.Variable "x"))) `shouldBe` N.Lambda (N.Lambda (N.ParamBound 0))
 
   describe "complex examples" $ do
     it "complex example 1" $ do
-      N.nameless (D.Lambda "z" (
+      namelessExpr (D.Lambda "z" (
                     D.Apply (
                       D.Lambda "y" (
                         D.Apply (D.Variable "y") (D.Lambda "x" (D.Variable "x"))
@@ -31,18 +36,18 @@ spec = do
                   N.Lambda (
                     N.Apply (
                       N.Lambda (
-                        N.Apply (N.Bound 0) (N.Lambda (N.Bound 0))
+                        N.Apply (N.ParamBound 0) (N.Lambda (N.ParamBound 0))
                       )
                     )
                     (
                       N.Lambda (
-                        N.Apply (N.Bound 1) (N.Bound 0)
+                        N.Apply (N.ParamBound 1) (N.ParamBound 0)
                       )
                     )
                   ))
 
     it "complex example 2, z combinator" $ do
-      N.nameless (D.Lambda "f" (
+      namelessExpr (D.Lambda "f" (
                     D.Apply (
                       D.Lambda "x" (
                         D.Apply
@@ -66,18 +71,18 @@ spec = do
                     N.Apply (
                       N.Lambda (
                         N.Apply
-                          (N.Bound 1)
+                          (N.ParamBound 1)
                           (N.Lambda (
-                            N.Apply (N.Apply (N.Bound 1) (N.Bound 1)) (N.Bound 0)
+                            N.Apply (N.Apply (N.ParamBound 1) (N.ParamBound 1)) (N.ParamBound 0)
                           ))
                       )
                     )
                     (
                       N.Lambda (
                         N.Apply
-                          (N.Bound 1)
+                          (N.ParamBound 1)
                           (N.Lambda (
-                            N.Apply (N.Apply (N.Bound 1) (N.Bound 1)) (N.Bound 0)
+                            N.Apply (N.Apply (N.ParamBound 1) (N.ParamBound 1)) (N.ParamBound 0)
                           ))
                       )
                     )
