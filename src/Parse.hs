@@ -117,7 +117,7 @@ definition :: Parser Def
 definition = nameDef
 
 definitions :: Parser [Def]
-definitions = optional hyphen >> definition `sepEndBy` hyphen
+definitions = many (optional hyphen >> definition)
   where
     hyphen = symbol "-"
 
