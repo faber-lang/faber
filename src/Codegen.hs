@@ -28,6 +28,7 @@ import qualified LLVM.Module  as LLVM
 
 import Hoist
 import Operators as Op
+import Utils
 
 -- TODO: every function takes two parameters, fix it with typing
 
@@ -53,16 +54,26 @@ callMalloc' len = do
   m <- callMalloc len
   IR.bitcast m $ Ty.ptr genericPtr
 
-data Env = Env { bound :: Maybe AST.Operand, args :: [AST.Operand]}
-withBound :: MonadReader Env m => AST.Operand -> m AST.Operand -> m AST.Operand
-withBound newBound = local update
+data Env =
+  Env { localBound :: Maybe AST.Operand
+      , args       :: [AST.Operand]
+      , letBound   :: [[AST.Operand]] }
+withLocalBound :: MonadReader Env m => AST.Operand -> m AST.Operand -> m AST.Operand
+withLocalBound newBound = local update
   where
-    update x = x { bound = Just newBound }
-getBound :: MonadReader Env m => m AST.Operand
-getBound = asks $ fromJust . bound
+    update x = x { localBound = Just newBound }
+getLocalBound :: MonadReader Env m => m AST.Operand
+getLocalBound = asks $ fromJust . localBound
+
+withLetBound :: MonadReader Env m => [AST.Operand] -> m AST.Operand -> m AST.Operand
+withLetBound bs = local update
+  where
+    update x = x { letBound = bs : letBound x }
+getLetBound :: MonadReader Env m => LetIndex -> m AST.Operand
+getLetBound (LetIndex 0 locI _ innI) = asks $ (!! innI) . (!! locI) . letBound
 
 initEnv :: Env
-initEnv = Env Nothing []
+initEnv = Env Nothing [] []
 initArg :: [AST.Operand] -> Env
 initArg xs = initEnv { args = xs }
 
@@ -76,6 +87,7 @@ genExpr (Integer i) = IR.inttoptr (constInt i) genericPtr
 genExpr (Parameter i) = asks $ (!! i) . args
 genExpr (NameRef name) = gets (Map.! name)
 genExpr (FunctionRef i) = IR.bitcast (namedFunction functionType $ nameFunction i) genericPtr
+genExpr (LetRef i) = getLetBound i
 genExpr (Call f a) = do
   f' <- genExpr f
   f' <- IR.bitcast f' $ Ty.ptr functionType
@@ -97,8 +109,11 @@ genExpr (NthOf i e) = do
   IR.load ptr 0
 genExpr (LocalLet e x) = do
   e' <- genExpr e
-  withBound e' $ genExpr x
-genExpr LocalBound = getBound
+  withLocalBound e' $ genExpr x
+genExpr LocalBound = getLocalBound
+genExpr (LetIn defs body) = do
+  defs' <- mapM genExpr defs
+  withLetBound defs' $ genExpr body
 genExpr (BinaryOp op l r) = join $ apply_op <$> genExpr l <*> genExpr r
   where
     apply_op a b = do
