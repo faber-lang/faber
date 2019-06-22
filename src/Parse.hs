@@ -2,12 +2,14 @@ module Parse where
 
 import           Control.Arrow
 import           Control.Monad.Combinators.Expr
+import           Data.Maybe                     (fromMaybe)
 import           Data.Void
-import qualified Operators                      as Op
 import           Text.Megaparsec                hiding (ParseError)
 import qualified Text.Megaparsec.Char           as C
 import qualified Text.Megaparsec.Char.Lexer     as L
 import           Text.Megaparsec.Error          (errorBundlePretty)
+
+import qualified Operators as Op
 
 -- syntax tree
 type Ident = String
@@ -24,7 +26,7 @@ data Expr
   deriving (Show, Eq)
 
 data DefBody
-  = Name [Ident] Expr
+  = Name [Ident] Expr [Def]
   deriving (Show, Eq)
 
 data Def = Def String DefBody deriving (Show, Eq)
@@ -54,7 +56,7 @@ parens :: Parser a -> Parser a
 parens = between (symbol "(") (symbol ")")
 
 rws :: [String]
-rws = ["let", "in"]
+rws = ["let", "in", "where", "end"]
 
 rword :: String -> Parser ()
 rword w = (lexeme . try) (C.string w *> notFollowedBy C.alphaNumChar)
@@ -111,7 +113,14 @@ nameDef = do
   params <- many identifier
   symbol "="
   body <- expr
-  return $ Def name $ Name params body
+  defs <- fromMaybe [] <$> optional where_
+  return $ Def name $ Name params body defs
+  where
+    where_ = do
+      rword "where"
+      defs <- definitions
+      rword "end"
+      return defs
 
 definition :: Parser Def
 definition = nameDef
