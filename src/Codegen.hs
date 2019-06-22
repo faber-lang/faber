@@ -59,7 +59,7 @@ withBound newBound = local update
   where
     update x = x { bound = Just newBound }
 getBound :: MonadReader Env m => m AST.Operand
-getBound = fromJust . bound <$> ask
+getBound = asks $ fromJust . bound
 
 initEnv :: Env
 initEnv = Env Nothing []
@@ -73,7 +73,7 @@ initNameMap = Map.empty
 
 genExpr :: (IR.MonadIRBuilder m, IR.MonadModuleBuilder m, MonadFix m, MonadReader Env m, MonadState NameMap m) => Expr -> m AST.Operand
 genExpr (Integer i) = IR.inttoptr (constInt i) genericPtr
-genExpr (Parameter i) = (!! i) . args <$> ask
+genExpr (Parameter i) = asks $ (!! i) . args
 genExpr (NameRef name) = gets (Map.! name)
 genExpr (FunctionRef i) = IR.bitcast (namedFunction functionType $ nameFunction i) genericPtr
 genExpr (Call f a) = do
@@ -155,9 +155,9 @@ genExpr (If c t e) = mdo
 
 genFunction :: (IR.MonadModuleBuilder m, MonadFix m) => String -> Function -> m AST.Operand
 genFunction name (Function n expr) =
-  IR.function (AST.mkName name) params genericPtr $ \args ->
+  IR.function (AST.mkName name) params genericPtr $ \argList ->
     -- prevent the use of NameRef by passing empty NameMap as a initial state
-    IR.ret =<< evalStateT (runReaderT (genExpr expr) (initArg args)) initNameMap
+    IR.ret =<< evalStateT (runReaderT (genExpr expr) (initArg argList)) initNameMap
   where
     params = replicate n (genericPtr, IR.NoParameterName)
 

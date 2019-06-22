@@ -15,8 +15,7 @@ import Data.Text
 compile :: P.Code -> IO Text
 compile x = do
   () <- evaluate t
-  ir <- Gen.toLLVM c
-  return ir
+  Gen.toLLVM c
   where
     e = N.nameless $ D.desugar x
     t = case T.typing e of
