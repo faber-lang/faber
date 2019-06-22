@@ -12,11 +12,11 @@ import qualified Typing   as T
 import Control.Exception
 import Data.Text
 
-compile :: P.Expr -> IO (T.Type, Text)
+compile :: P.Code -> IO Text
 compile x = do
+  () <- evaluate t
   ir <- Gen.toLLVM c
-  t' <- evaluate t
-  return (t', ir)
+  return ir
   where
     e = N.nameless $ D.desugar x
     t = case T.typing e of
