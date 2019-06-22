@@ -11,7 +11,7 @@ parse s = case parseCode "" code of
   Right t               -> destruct t
   where
     code = "main = " ++ s
-    destruct [Def _ (Name [] body)] = body
+    destruct [Def _ (Name [] body [])] = body
 
 add :: Expr -> Expr -> Expr
 add = BinaryOp Add
@@ -97,4 +97,4 @@ spec = do
 
   describe "definition" $ do
     it "parse simple name definitions" $ do
-      parseCode "" "- def x y = x + y\n- main = 1" `shouldBe` Right [Def "def" (Name ["x", "y"] $ add (var "x") (var "y")), Def "main" (Name [] $ int 1)]
+      parseCode "" "- def x y = x + y\n- main = 1" `shouldBe` Right [Def "def" (Name ["x", "y"] (add (var "x") (var "y")) []), Def "main" (Name [] (int 1) [])]

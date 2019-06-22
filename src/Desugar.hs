@@ -36,7 +36,8 @@ desugarExpr (P.Tuple xs)        = Tuple $ map desugarExpr xs
 desugarExpr (P.LetIn defs x)    = LetIn (map desugarDef defs) $ desugarExpr x
 
 desugarDefBody :: P.DefBody -> DefBody
-desugarDefBody (P.Name ps body) = Name $ desugarLambda ps $ desugarExpr body
+desugarDefBody (P.Name ps body []) = Name $ desugarLambda ps $ desugarExpr body
+desugarDefBody (P.Name ps body defs) = Name $ LetIn (map desugarDef defs) $ desugarLambda ps $ desugarExpr body
 
 desugarDef :: P.Def -> Def
 desugarDef (P.Def name body) = Def name $ desugarDefBody body
