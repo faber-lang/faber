@@ -30,7 +30,9 @@ data DefBody
 
 data Def = Def String DefBody
 
-type Code = [Def]
+data Code =
+  Code { definitions :: [Def]
+       , entrypoint  :: Expr }
 
 -- holds a set of free variables as a state
 type Convert = State [L.Expr]
@@ -75,4 +77,4 @@ convertDef :: L.Def -> Def
 convertDef (L.Def name (L.Name body)) = Def name $ Name $ convertTopExpr body
 
 convert :: L.Code -> Code
-convert = map convertDef
+convert (L.Code defs entry)= Code (map convertDef defs) (convertTopExpr entry)

@@ -26,7 +26,9 @@ data DefBody
 
 data Def = Def String DefBody
 
-type Code = [Def]
+data Code =
+  Code { definitions :: [Def]
+       , entrypoint  :: Expr }
 
 incrVars :: Int -> N.Expr -> N.Expr
 incrVars n (N.ParamBound i)   | i >= n    = N.ParamBound $ i + 1
@@ -88,4 +90,7 @@ lazyDef :: N.Def -> Def
 lazyDef (N.Def name body) = Def name $ lazyDefBody body
 
 lazy :: N.Code -> Code
-lazy = map lazyDef
+lazy code = Code defs entry
+  where
+    defs = map lazyDef code
+    entry = evalThunk (GlobalBound "main")

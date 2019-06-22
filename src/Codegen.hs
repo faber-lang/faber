@@ -169,8 +169,10 @@ genDef (Def name (Name body)) = do
   e <- genTopExpr body
   modify $ Map.insert name e
 
-genCode :: (IR.MonadIRBuilder m, IR.MonadModuleBuilder m, MonadFix m) => Code -> m NameMap
-genCode c = execStateT (mapM_ genDef c) initNameMap
+genCode :: (IR.MonadIRBuilder m, IR.MonadModuleBuilder m, MonadFix m) => Code -> m AST.Operand
+genCode (Code defs entry) = evalStateT gen initNameMap
+  where
+    gen = mapM_ genDef defs >> genTopExpr entry
 
 nameFunction :: Int -> String
 nameFunction i = "__faber_fn_" ++ show i
@@ -180,10 +182,9 @@ codegen m = IR.buildModule "faber-output" $ do
   _ <- IR.extern "malloc" [Ty.i64] genericPtr
   zipWithM_ (genFunction . nameFunction) [0..] (functions m)
   IR.function "main" [(Ty.i32, "argc"), (Ty.ptr (Ty.ptr Ty.i8), "argv")] Ty.i32 $ \[_, _] -> do
-    names <- genCode $ code m
-    let ret = names Map.! "main" in do
-      int <- IR.ptrtoint ret Ty.i64
-      IR.ret =<< IR.trunc int Ty.i32
+    ret <- genCode $ code m
+    int <- IR.ptrtoint ret Ty.i64
+    IR.ret =<< IR.trunc int Ty.i32
 
 toLLVM :: AST.Module -> IO Text
 toLLVM m = LLVM.withContext $ \ctx ->

@@ -32,7 +32,10 @@ data DefBody
 data Def = Def String DefBody
   deriving (Show, Eq)
 
-type Code = [Def]
+data Code =
+  Code { definitions :: [Def]
+       , entrypoint  :: Expr }
+  deriving (Show, Eq)
 
 data Module =
   Module { functions :: [Function]
@@ -74,7 +77,7 @@ hoistDef :: C.Def -> Hoist Def
 hoistDef (C.Def name (C.Name body)) = Def name . Name <$> hoistExpr body
 
 hoistCode :: C.Code -> Hoist Code
-hoistCode = mapM hoistDef
+hoistCode (C.Code defs entry) = Code <$> mapM hoistDef defs <*> hoistExpr entry
 
 hoist :: C.Code -> Module
 hoist c = Module { functions = reverse funs, code = c' }
