@@ -1,5 +1,9 @@
 module Lazy where
 
+import Control.Monad.Reader
+import Data.Bool            (bool)
+import Data.Tuple.Extra     (first, second)
+
 import qualified Nameless  as N
 import qualified Operators as Op
 
@@ -36,20 +40,23 @@ data Code =
        , entrypoint  :: Expr }
   deriving (Show, Eq)
 
-incrVars :: Int -> Int -> N.Expr -> N.Expr
-incrVars n _ (N.ParamBound i)   | i >= n    = N.ParamBound $ i + 1
-                                | otherwise = N.ParamBound i
-incrVars n m (N.LetBound i)  | lambdaIndex i > n ||
-                               (lambdaIndex i == n && localIndex i >= m) = N.LetBound $ mapLambdaIndex succ i
-                             | otherwise = N.LetBound i
-incrVars _ _ (N.GlobalBound s)         = N.GlobalBound s
-incrVars _ _ (N.Integer i)             = N.Integer i
-incrVars n m (N.Lambda x)              = N.Lambda $ incrVars (succ n) m x
-incrVars n m (N.Apply a b)             = N.Apply (incrVars n m a) (incrVars n m b)
-incrVars n m (N.BinaryOp op a b)       = N.BinaryOp op (incrVars n m a) (incrVars n m b)
-incrVars n m (N.SingleOp op x)         = N.SingleOp op $ incrVars n m x
-incrVars n m (N.Tuple xs)              = N.Tuple $ map (incrVars n m) xs
-incrVars n m (N.LetIn defs body)       = N.LetIn (map (incrVars n m) defs) $ incrVars n (succ m) body
+type Lift = Reader (Int, Int)
+
+liftVars :: N.Expr -> Lift N.Expr
+liftVars (N.ParamBound i) = bool (N.ParamBound i) (N.ParamBound $ i + 1) <$> asks shouldLift
+  where
+    shouldLift (n, _) = i >= n
+liftVars (N.LetBound i) = bool (N.LetBound i) (N.LetBound $ mapLambdaIndex succ i) <$> asks (shouldLift i)
+  where
+    shouldLift (LetIndex lam loc _  _) (n, m) = lam > n || (lam == n && loc >= m)
+liftVars (N.GlobalBound s)         = return $ N.GlobalBound s
+liftVars (N.Integer i)             = return $ N.Integer i
+liftVars (N.Lambda x)              = N.Lambda <$> local (first succ) (liftVars x)
+liftVars (N.Apply a b)             = N.Apply <$> liftVars a <*> liftVars b
+liftVars (N.BinaryOp op a b)       = N.BinaryOp op <$> liftVars a <*> liftVars b
+liftVars (N.SingleOp op x)         = N.SingleOp op <$> liftVars x
+liftVars (N.Tuple xs)              = N.Tuple <$> mapM liftVars xs
+liftVars (N.LetIn defs body)       = N.LetIn <$> mapM liftVars defs <*> local (second succ) (liftVars body)
 
 makeEvaledThunk :: Expr -> Expr
 makeEvaledThunk e = Ref $ Tuple [Integer 1, e]
@@ -58,7 +65,7 @@ makeThunk :: N.Expr -> Expr
 makeThunk e = Ref $ Tuple [Integer 0, code]
   where
     code = Lambda $ NthOf 1 $ Assign (ParamBound 0) updated
-    updated = Tuple [Integer 1, lazyExpr $ incrVars 0 0 e]
+    updated = Tuple [Integer 1, lazyExpr $ runReader (liftVars e) (0, 0)]
 
 evalThunk :: Expr -> Expr
 evalThunk e = LocalLet (Deref e) $ If cond then_ else_
