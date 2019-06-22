@@ -3,6 +3,7 @@ module Hoist where
 import qualified Closure             as C
 import           Control.Monad.State
 import qualified Operators           as Op
+import           Utils
 
 -- `Call` and `Function` directly correspond to the actual call and function
 data Function = Function Int Expr deriving (Show, Eq)
@@ -12,6 +13,7 @@ data Expr
   | Parameter Int
   | FunctionRef Int
   | NameRef String
+  | LetRef LetIndex
   | Call Expr [Expr]
   | BinaryOp Op.BinaryOp Expr Expr
   | SingleOp Op.SingleOp Expr
@@ -23,6 +25,7 @@ data Expr
   | Assign Expr Expr
   | Deref Expr
   | If Expr Expr Expr
+  | LetIn [Expr] Expr
   deriving (Show, Eq)
 
 data DefBody
@@ -60,6 +63,7 @@ hoistExpr (C.Apply a b)       = join $ convertApply <$> hoistExpr a <*> hoistExp
 hoistExpr C.Parameter         = return $ Parameter 1
 hoistExpr C.Env               = return $ Parameter 0
 -- boring conversion
+hoistExpr (C.LetBound i)      = return $ LetRef i
 hoistExpr (C.GlobalName name) = return $ NameRef name
 hoistExpr (C.Integer i)       = return $ Integer i
 hoistExpr (C.BinaryOp op a b) = BinaryOp op <$> hoistExpr a <*> hoistExpr b
@@ -71,7 +75,8 @@ hoistExpr (C.Assign a b)      = Assign <$> hoistExpr a <*> hoistExpr b
 hoistExpr (C.Deref x)         = Deref <$> hoistExpr x
 hoistExpr (C.If c t e)        = If <$> hoistExpr c <*> hoistExpr t <*> hoistExpr e
 hoistExpr (C.LocalLet a b)    = LocalLet <$> hoistExpr a <*> hoistExpr b
-hoistExpr C.LocalBound          = return LocalBound
+hoistExpr C.LocalBound        = return LocalBound
+hoistExpr (C.LetIn defs body) = LetIn <$> mapM hoistExpr defs <*> hoistExpr body
 
 hoistDef :: C.Def -> Hoist Def
 hoistDef (C.Def name (C.Name body)) = Def name . Name <$> hoistExpr body
