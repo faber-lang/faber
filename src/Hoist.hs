@@ -11,6 +11,7 @@ data Expr
   = Integer Int
   | Parameter Int
   | FunctionRef Int
+  | NameRef String
   | Call Expr [Expr]
   | BinaryOp Op.BinaryOp Expr Expr
   | SingleOp Op.SingleOp Expr
@@ -24,9 +25,21 @@ data Expr
   | If Expr Expr Expr
   deriving (Show, Eq)
 
+data DefBody
+  = Name Expr
+  deriving (Show, Eq)
+
+data Def = Def String DefBody
+  deriving (Show, Eq)
+
+data Code =
+  Code { definitions :: [Def]
+       , entrypoint  :: Expr }
+  deriving (Show, Eq)
+
 data Module =
-  Module { functions  :: [Function]
-         , entrypoint :: Expr }
+  Module { functions :: [Function]
+         , code      :: Code }
   deriving (Show, Eq)
 
 type Hoist = State [Function]
@@ -39,27 +52,34 @@ hoistFun e = do
 convertApply :: Expr -> Expr -> Hoist Expr
 convertApply a b = return $ LocalLet a $ Call (NthOf 0 LetBound) [NthOf 1 LetBound, b]
 
-hoist' :: C.Expr -> Hoist Expr
+hoistExpr :: C.Expr -> Hoist Expr
 -- function hoisting
-hoist' (C.Function e)      = hoistFun =<< hoist' e
+hoistExpr (C.Function e)      = hoistFun =<< hoistExpr e
 -- closure calling convention
-hoist' (C.Apply a b)       = join $ convertApply <$> hoist' a <*> hoist' b
-hoist' C.Parameter         = return $ Parameter 1
-hoist' C.Env               = return $ Parameter 0
+hoistExpr (C.Apply a b)       = join $ convertApply <$> hoistExpr a <*> hoistExpr b
+hoistExpr C.Parameter         = return $ Parameter 1
+hoistExpr C.Env               = return $ Parameter 0
 -- boring conversion
-hoist' (C.Integer i)       = return $ Integer i
-hoist' (C.BinaryOp op a b) = BinaryOp op <$> hoist' a <*> hoist' b
-hoist' (C.SingleOp op x)   = SingleOp op <$> hoist' x
-hoist' (C.Tuple xs)        = Tuple <$> mapM hoist' xs
-hoist' (C.NthOf i x)       = NthOf i <$> hoist' x
-hoist' (C.Ref x)           = Ref <$> hoist' x
-hoist' (C.Assign a b)      = Assign <$> hoist' a <*> hoist' b
-hoist' (C.Deref x)         = Deref <$> hoist' x
-hoist' (C.If c t e)        = If <$> hoist' c <*> hoist' t <*> hoist' e
-hoist' (C.LocalLet a b)    = LocalLet <$> hoist' a <*> hoist' b
-hoist' C.LetBound          = return LetBound
+hoistExpr (C.GlobalName name) = return $ NameRef name
+hoistExpr (C.Integer i)       = return $ Integer i
+hoistExpr (C.BinaryOp op a b) = BinaryOp op <$> hoistExpr a <*> hoistExpr b
+hoistExpr (C.SingleOp op x)   = SingleOp op <$> hoistExpr x
+hoistExpr (C.Tuple xs)        = Tuple <$> mapM hoistExpr xs
+hoistExpr (C.NthOf i x)       = NthOf i <$> hoistExpr x
+hoistExpr (C.Ref x)           = Ref <$> hoistExpr x
+hoistExpr (C.Assign a b)      = Assign <$> hoistExpr a <*> hoistExpr b
+hoistExpr (C.Deref x)         = Deref <$> hoistExpr x
+hoistExpr (C.If c t e)        = If <$> hoistExpr c <*> hoistExpr t <*> hoistExpr e
+hoistExpr (C.LocalLet a b)    = LocalLet <$> hoistExpr a <*> hoistExpr b
+hoistExpr C.LetBound          = return LetBound
 
-hoist :: C.Expr -> Module
-hoist e = Module { functions = reverse funs, entrypoint = e' }
+hoistDef :: C.Def -> Hoist Def
+hoistDef (C.Def name (C.Name body)) = Def name . Name <$> hoistExpr body
+
+hoistCode :: C.Code -> Hoist Code
+hoistCode (C.Code defs entry) = Code <$> mapM hoistDef defs <*> hoistExpr entry
+
+hoist :: C.Code -> Module
+hoist c = Module { functions = reverse funs, code = c' }
   where
-    (e', funs) = runState (hoist' e) []
+    (c', funs) = runState (hoistCode c) []

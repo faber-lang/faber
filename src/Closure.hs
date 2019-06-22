@@ -9,6 +9,7 @@ import qualified Operators as Op
 data Expr
   = Integer Int
   | Function Expr
+  | GlobalName String
   | Parameter
   | Env
   | Apply Expr Expr
@@ -24,39 +25,73 @@ data Expr
   | LetBound
   deriving (Show, Eq)
 
--- holds a set of free variables as a state
-type Convert = State [Int]
+data DefBody
+  = Name Expr
 
-update :: Int -> Convert Int
-update i = do
+data Def = Def String DefBody
+
+data Code =
+  Code { definitions :: [Def]
+       , entrypoint  :: Expr }
+
+-- holds a set of free variables as a state
+type Convert = State [L.Expr]
+
+update :: L.Expr -> Convert Int
+update e = do
   fvs <- get
-  case elemIndex (i - 1) fvs of
+  case elemIndex e fvs of
     Just idx -> return idx
     Nothing -> do
-      put $ fvs ++ [i - 1]
+      put $ fvs ++ [e]
       return $ length fvs
 
 -- convert a body of lambda
-convert' :: L.Expr -> Convert Expr
-convert' (L.Bound 0) = return Parameter
-convert' (L.Bound i) = flip NthOf Env <$> update i
-convert' (L.Lambda e) = do
-  t <- convert' $ L.Tuple $ map L.Bound fvs
+convertBody :: L.Expr -> Convert Expr
+convertBody (L.ParamBound 0) = return Parameter
+convertBody (L.ParamBound i) = flip NthOf Env <$> update (L.ParamBound $ i - 1)
+convertBody (L.GlobalBound s) = flip NthOf Env <$> update (L.GlobalBound s)
+convertBody (L.Lambda e) = do
+  t <- convertBody $ L.Tuple fvs
   return $ Tuple [Function body, t]
   where
-    (body, fvs) = runState (convert' e) []
-convert' (L.Integer i) = return $ Integer i
-convert' (L.Apply a b) = Apply <$> convert' a <*> convert' b
-convert' (L.BinaryOp op a b) = BinaryOp op <$> convert' a <*> convert' b
-convert' (L.SingleOp op x) = SingleOp op <$> convert' x
-convert' (L.Tuple xs) = Tuple <$> mapM convert' xs
-convert' (L.NthOf i x) = NthOf i <$> convert' x
-convert' (L.Ref x) = Ref <$> convert' x
-convert' (L.Assign a b) = Assign <$> convert' a <*> convert' b
-convert' (L.Deref x) = Deref <$> convert' x
-convert' (L.If c t e) = If <$> convert' c <*> convert' t <*> convert' e
-convert' (L.LocalLet a b) = LocalLet <$> convert' a <*> convert' b
-convert' L.LetBound = return LetBound
+    (body, fvs) = runState (convertBody e) []
+convertBody (L.Integer i) = return $ Integer i
+convertBody (L.Apply a b) = Apply <$> convertBody a <*> convertBody b
+convertBody (L.BinaryOp op a b) = BinaryOp op <$> convertBody a <*> convertBody b
+convertBody (L.SingleOp op x) = SingleOp op <$> convertBody x
+convertBody (L.Tuple xs) = Tuple <$> mapM convertBody xs
+convertBody (L.NthOf i x) = NthOf i <$> convertBody x
+convertBody (L.Ref x) = Ref <$> convertBody x
+convertBody (L.Assign a b) = Assign <$> convertBody a <*> convertBody b
+convertBody (L.Deref x) = Deref <$> convertBody x
+convertBody (L.If c t e) = If <$> convertBody c <*> convertBody t <*> convertBody e
+convertBody (L.LocalLet a b) = LocalLet <$> convertBody a <*> convertBody b
+convertBody L.LetBound = return LetBound
 
-convert :: L.Expr -> Expr
-convert e = evalState (convert' e) []
+-- convert a top-level expression
+convertExpr :: L.Expr -> Expr
+convertExpr (L.ParamBound i) = error $ "Invalid occurrence of parameter " ++ show i
+convertExpr (L.GlobalBound s) = GlobalName s
+convertExpr (L.Lambda e) = Tuple [Function body, t]
+  where
+    t = convertExpr $ L.Tuple fvs
+    (body, fvs) = runState (convertBody e) []
+convertExpr (L.Integer i) = Integer i
+convertExpr (L.Apply a b) = Apply (convertExpr a) (convertExpr b)
+convertExpr (L.BinaryOp op a b) = BinaryOp op (convertExpr a) (convertExpr b)
+convertExpr (L.SingleOp op x) = SingleOp op $ convertExpr x
+convertExpr (L.Tuple xs) = Tuple $ map convertExpr xs
+convertExpr (L.NthOf i x) = NthOf i $ convertExpr x
+convertExpr (L.Ref x) = Ref $ convertExpr x
+convertExpr (L.Assign a b) = Assign (convertExpr a) (convertExpr b)
+convertExpr (L.Deref x) = Deref $ convertExpr x
+convertExpr (L.If c t e) = If (convertExpr c) (convertExpr t) (convertExpr e)
+convertExpr (L.LocalLet a b) = LocalLet (convertExpr a) (convertExpr b)
+convertExpr L.LetBound = LetBound
+
+convertDef :: L.Def -> Def
+convertDef (L.Def name (L.Name body)) = Def name $ Name $ convertExpr body
+
+convert :: L.Code -> Code
+convert (L.Code defs entry)= Code (map convertDef defs) (convertExpr entry)

@@ -10,11 +10,11 @@ spec = do
   describe "closure conversion" $ do
     it "convert lambdas" $ do
       -- \. 0
-      convert (L.Lambda $ L.Bound 0) `shouldBe` Tuple [Function Parameter, Tuple []]
+      convertExpr (L.Lambda $ L.ParamBound 0) `shouldBe` Tuple [Function Parameter, Tuple []]
       -- \.\. 0 1
-      convert (L.Lambda (
+      convertExpr (L.Lambda (
                 L.Lambda (
-                  L.Apply (L.Bound 0) (L.Bound 1)
+                  L.Apply (L.ParamBound 0) (L.ParamBound 1)
                 )
               )) `shouldBe` (
               Tuple [
@@ -31,19 +31,22 @@ spec = do
                 Tuple []
               ])
 
+    it "convert lambdas with reference to the global name" $ do
+      convertExpr (L.Apply (L.GlobalBound "f") (L.Lambda $ L.GlobalBound "g")) `shouldBe` Apply (GlobalName "f") (Tuple [Function $ NthOf 0 Env, Tuple [GlobalName "g"]])
+
     it "convert lambdas with multiple occured parameter" $ do
       -- \. 0 0
-      convert (L.Lambda $ L.Apply (L.Bound 0) (L.Bound 0)) `shouldBe` Tuple [Function (Apply Parameter Parameter), Tuple []]
+      convertExpr (L.Lambda $ L.Apply (L.ParamBound 0) (L.ParamBound 0)) `shouldBe` Tuple [Function (Apply Parameter Parameter), Tuple []]
       -- \.\. 0 1 0 1
-      convert (L.Lambda (
+      convertExpr (L.Lambda (
                 L.Lambda (
                   L.Apply (
                     L.Apply (
-                      L.Apply (L.Bound 0) (L.Bound 1)
+                      L.Apply (L.ParamBound 0) (L.ParamBound 1)
                     )
-                    (L.Bound 0)
+                    (L.ParamBound 0)
                   )
-                  (L.Bound 1)
+                  (L.ParamBound 1)
                 )
               )) `shouldBe` (
               Tuple [
@@ -68,13 +71,13 @@ spec = do
 
     it "convert deeply nested lambdas" $ do
       -- \.\.\. 0 1 2
-      convert (L.Lambda (
+      convertExpr (L.Lambda (
                 L.Lambda (
                   L.Lambda (
                     L.Apply (
-                      L.Apply (L.Bound 2) (L.Bound 1)
+                      L.Apply (L.ParamBound 2) (L.ParamBound 1)
                     )
-                    (L.Bound 0)
+                    (L.ParamBound 0)
                   )
                 )
               )) `shouldBe` (

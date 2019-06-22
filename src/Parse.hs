@@ -22,6 +22,14 @@ data Expr
   | SingleOp Op.SingleOp Expr
   deriving (Show, Eq)
 
+data DefBody
+  = Name [Ident] Expr
+  deriving (Show, Eq)
+
+data Def = Def String DefBody deriving (Show, Eq)
+
+type Code = [Def]
+
 -- parser type definition
 type Parser = Parsec Void String
 
@@ -77,13 +85,29 @@ term = try (parens expr)
 expr :: Parser Expr
 expr = makeExprParser term operators
 
+-- definition parser
+nameDef :: Parser Def
+nameDef = do
+  name <- identifier
+  params <- many identifier
+  symbol "="
+  body <- expr
+  symbol ";;"
+  return $ Def name $ Name params body
+
+definition :: Parser Def
+definition = nameDef
+
 -- wrap them up
-parser :: Parser Expr
-parser = between space eof expr
+code :: Parser Code
+code = many definition
 
-newtype ParseError = ParseError String deriving (Show)
+parser :: Parser Code
+parser = between space eof code
 
-parseExpr :: String -> String -> Either ParseError Expr
-parseExpr name input = left pretty $ parse parser name input
+newtype ParseError = ParseError String deriving (Show, Eq)
+
+parseCode :: String -> String -> Either ParseError Code
+parseCode name input = left pretty $ parse parser name input
   where
     pretty = ParseError . errorBundlePretty

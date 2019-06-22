@@ -6,9 +6,12 @@ import Test.Hspec
 
 -- helpers
 parse :: String -> Expr
-parse s = case parseExpr "" s of
+parse s = case parseCode "" code of
   Left (ParseError err) -> error err
-  Right t               -> t
+  Right t               -> destruct t
+  where
+    code = "main = " ++ s ++ ";;"
+    destruct [Def _ (Name [] body)] = body
 
 add :: Expr -> Expr -> Expr
 add = BinaryOp Add
@@ -91,3 +94,7 @@ spec = do
       parse "(1+2,3+4)" `shouldBe` Tuple [int 1 `add` int 2, int 3 `add` int 4]
       parse "(0,)" `shouldBe` Tuple [int 0]
       parse "()" `shouldBe` Tuple []
+
+  describe "definition" $ do
+    it "parse simple name definitions" $ do
+      parseCode "" "def x y = x + y ;; \nmain = 1 ;;" `shouldBe` Right [Def "def" (Name ["x", "y"] $ add (var "x") (var "y")), Def "main" (Name [] $ int 1)]
