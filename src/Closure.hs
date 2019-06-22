@@ -47,34 +47,51 @@ update e = do
       return $ length fvs
 
 -- convert a body of lambda
-convertExpr :: L.Expr -> Convert Expr
-convertExpr (L.ParamBound 0) = return Parameter
-convertExpr (L.ParamBound i) = flip NthOf Env <$> update (L.ParamBound $ i - 1)
-convertExpr (L.GlobalBound s) = flip NthOf Env <$> update (L.GlobalBound s)
-convertExpr (L.Lambda e) = do
-  t <- convertExpr $ L.Tuple fvs
+convertBody :: L.Expr -> Convert Expr
+convertBody (L.ParamBound 0) = return Parameter
+convertBody (L.ParamBound i) = flip NthOf Env <$> update (L.ParamBound $ i - 1)
+convertBody (L.GlobalBound s) = flip NthOf Env <$> update (L.GlobalBound s)
+convertBody (L.Lambda e) = do
+  t <- convertBody $ L.Tuple fvs
   return $ Tuple [Function body, t]
   where
-    (body, fvs) = runState (convertExpr e) []
-convertExpr (L.Integer i) = return $ Integer i
-convertExpr (L.Apply a b) = Apply <$> convertExpr a <*> convertExpr b
-convertExpr (L.BinaryOp op a b) = BinaryOp op <$> convertExpr a <*> convertExpr b
-convertExpr (L.SingleOp op x) = SingleOp op <$> convertExpr x
-convertExpr (L.Tuple xs) = Tuple <$> mapM convertExpr xs
-convertExpr (L.NthOf i x) = NthOf i <$> convertExpr x
-convertExpr (L.Ref x) = Ref <$> convertExpr x
-convertExpr (L.Assign a b) = Assign <$> convertExpr a <*> convertExpr b
-convertExpr (L.Deref x) = Deref <$> convertExpr x
-convertExpr (L.If c t e) = If <$> convertExpr c <*> convertExpr t <*> convertExpr e
-convertExpr (L.LocalLet a b) = LocalLet <$> convertExpr a <*> convertExpr b
-convertExpr L.LetBound = return LetBound
+    (body, fvs) = runState (convertBody e) []
+convertBody (L.Integer i) = return $ Integer i
+convertBody (L.Apply a b) = Apply <$> convertBody a <*> convertBody b
+convertBody (L.BinaryOp op a b) = BinaryOp op <$> convertBody a <*> convertBody b
+convertBody (L.SingleOp op x) = SingleOp op <$> convertBody x
+convertBody (L.Tuple xs) = Tuple <$> mapM convertBody xs
+convertBody (L.NthOf i x) = NthOf i <$> convertBody x
+convertBody (L.Ref x) = Ref <$> convertBody x
+convertBody (L.Assign a b) = Assign <$> convertBody a <*> convertBody b
+convertBody (L.Deref x) = Deref <$> convertBody x
+convertBody (L.If c t e) = If <$> convertBody c <*> convertBody t <*> convertBody e
+convertBody (L.LocalLet a b) = LocalLet <$> convertBody a <*> convertBody b
+convertBody L.LetBound = return LetBound
 
-convertTopExpr :: L.Expr -> Expr
-convertTopExpr (L.GlobalBound s) = GlobalName s
-convertTopExpr e                 = evalState (convertExpr e) []
+-- convert a top-level expression
+convertExpr :: L.Expr -> Expr
+convertExpr (L.ParamBound i) = error $ "Invalid occurrence of parameter " ++ show i
+convertExpr (L.GlobalBound s) = GlobalName s
+convertExpr (L.Lambda e) = Tuple [Function body, t]
+  where
+    t = convertExpr $ L.Tuple fvs
+    (body, fvs) = runState (convertBody e) []
+convertExpr (L.Integer i) = Integer i
+convertExpr (L.Apply a b) = Apply (convertExpr a) (convertExpr b)
+convertExpr (L.BinaryOp op a b) = BinaryOp op (convertExpr a) (convertExpr b)
+convertExpr (L.SingleOp op x) = SingleOp op $ convertExpr x
+convertExpr (L.Tuple xs) = Tuple $ map convertExpr xs
+convertExpr (L.NthOf i x) = NthOf i $ convertExpr x
+convertExpr (L.Ref x) = Ref $ convertExpr x
+convertExpr (L.Assign a b) = Assign (convertExpr a) (convertExpr b)
+convertExpr (L.Deref x) = Deref $ convertExpr x
+convertExpr (L.If c t e) = If (convertExpr c) (convertExpr t) (convertExpr e)
+convertExpr (L.LocalLet a b) = LocalLet (convertExpr a) (convertExpr b)
+convertExpr L.LetBound = LetBound
 
 convertDef :: L.Def -> Def
-convertDef (L.Def name (L.Name body)) = Def name $ Name $ convertTopExpr body
+convertDef (L.Def name (L.Name body)) = Def name $ Name $ convertExpr body
 
 convert :: L.Code -> Code
-convert (L.Code defs entry)= Code (map convertDef defs) (convertTopExpr entry)
+convert (L.Code defs entry)= Code (map convertDef defs) (convertExpr entry)
