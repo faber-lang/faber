@@ -90,7 +90,9 @@ nameDef = do
   name <- identifier
   params <- many identifier
   symbol "="
-  Def name . Name params <$> expr
+  body <- expr
+  symbol ";;"
+  return $ Def name $ Name params body
 
 definition :: Parser Def
 definition = nameDef
