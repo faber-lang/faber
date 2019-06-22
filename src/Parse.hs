@@ -92,15 +92,19 @@ nameDef = do
   params <- many identifier
   symbol "="
   body <- expr
-  symbol ";;"
   return $ Def name $ Name params body
 
 definition :: Parser Def
 definition = nameDef
 
+definitions :: Parser [Def]
+definitions = optional hyphen >> definition `sepEndBy` hyphen
+  where
+    hyphen = symbol "-"
+
 -- wrap them up
 code :: Parser Code
-code = many definition
+code = definitions
 
 parser :: Parser Code
 parser = between space eof code
