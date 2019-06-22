@@ -60,11 +60,15 @@ namelessExpr (D.Tuple xs) = Tuple <$> mapM namelessExpr xs
 namelessDefBody :: D.DefBody -> Nameless DefBody
 namelessDefBody (D.Name body) = Name <$> namelessExpr body
 
-namelessDef :: D.Def -> Nameless Def
-namelessDef (D.Def name body) = Def name <$> withBinding (Global name) (namelessDefBody body)
+namelessDefs :: [D.Def] -> Nameless [Def]
+namelessDefs (D.Def name body:xs) = do
+  def <- Def name <$> namelessDefBody body
+  xs' <- withBinding (Global name) (namelessDefs xs)
+  return $ def : xs'
+namelessDefs [] = return []
 
 namelessCode :: D.Code -> Nameless Code
-namelessCode = mapM namelessDef
+namelessCode = namelessDefs
 
 nameless :: D.Code -> Code
 nameless c = runReader (namelessCode c) initEnv
