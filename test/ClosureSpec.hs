@@ -8,7 +8,7 @@ import qualified Lazy    as L
 spec :: Spec
 spec = do
   describe "closure conversion" $ do
-    it "convertExpr lambdas" $ do
+    it "convert lambdas" $ do
       -- \. 0
       convertExpr (L.Lambda $ L.ParamBound 0) `shouldBe` Tuple [Function Parameter, Tuple []]
       -- \.\. 0 1
@@ -31,7 +31,10 @@ spec = do
                 Tuple []
               ])
 
-    it "convertExpr lambdas with multiple occured parameter" $ do
+    it "convert lambdas with reference to the global name" $ do
+      convertExpr (L.Apply (L.GlobalBound "f") (L.Lambda $ L.GlobalBound "g")) `shouldBe` Apply (GlobalName "f") (Tuple [Function $ NthOf 0 Env, Tuple [GlobalName "g"]])
+
+    it "convert lambdas with multiple occured parameter" $ do
       -- \. 0 0
       convertExpr (L.Lambda $ L.Apply (L.ParamBound 0) (L.ParamBound 0)) `shouldBe` Tuple [Function (Apply Parameter Parameter), Tuple []]
       -- \.\. 0 1 0 1
@@ -66,7 +69,7 @@ spec = do
                 Tuple []
               ])
 
-    it "convertExpr deeply nested lambdas" $ do
+    it "convert deeply nested lambdas" $ do
       -- \.\.\. 0 1 2
       convertExpr (L.Lambda (
                 L.Lambda (

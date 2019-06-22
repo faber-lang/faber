@@ -18,8 +18,9 @@ data Expr
 
 data DefBody
   = Name Expr
+  deriving (Show, Eq)
 
-data Def = Def String DefBody
+data Def = Def String DefBody deriving (Show, Eq)
 
 type Code = [Def]
 

@@ -19,6 +19,10 @@ spec = do
     it "convert shadowing names" $ do
       namelessExpr (D.Lambda "x" (D.Lambda "x" (D.Variable "x"))) `shouldBe` N.Lambda (N.Lambda (N.ParamBound 0))
 
+  describe "global names" $ do
+    it "convert global name reference" $ do
+      N.nameless [D.Def "a" (D.Name $ D.Integer 1), D.Def "main" (D.Name $ D.Variable "a")] `shouldBe` [N.Def "a" (N.Name $ N.Integer 1), N.Def "main" (N.Name $ N.GlobalBound "a")]
+
   describe "complex examples" $ do
     it "complex example 1" $ do
       namelessExpr (D.Lambda "z" (

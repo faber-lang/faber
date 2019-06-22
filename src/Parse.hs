@@ -24,8 +24,9 @@ data Expr
 
 data DefBody
   = Name [Ident] Expr
+  deriving (Show, Eq)
 
-data Def = Def String DefBody
+data Def = Def String DefBody deriving (Show, Eq)
 
 type Code = [Def]
 
@@ -104,7 +105,7 @@ code = many definition
 parser :: Parser Code
 parser = between space eof code
 
-newtype ParseError = ParseError String deriving (Show)
+newtype ParseError = ParseError String deriving (Show, Eq)
 
 parseCode :: String -> String -> Either ParseError Code
 parseCode name input = left pretty $ parse parser name input

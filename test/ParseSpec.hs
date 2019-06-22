@@ -94,3 +94,7 @@ spec = do
       parse "(1+2,3+4)" `shouldBe` Tuple [int 1 `add` int 2, int 3 `add` int 4]
       parse "(0,)" `shouldBe` Tuple [int 0]
       parse "()" `shouldBe` Tuple []
+
+  describe "definition" $ do
+    it "parse simple name definitions" $ do
+      parseCode "" "def x y = x + y ;; \nmain = 1 ;;" `shouldBe` Right [Def "def" (Name ["x", "y"] $ add (var "x") (var "y")), Def "main" (Name [] $ int 1)]
