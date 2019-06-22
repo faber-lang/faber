@@ -130,21 +130,20 @@ occursCheck :: Substitutable a => Int -> a -> Bool
 occursCheck i t = i `Set.member` ftv t
 
 inferExpr :: N.Expr -> Infer (Subst, Type)
-inferExpr e = case e of
-  N.ParamBound i -> (,) nullSubst <$> findParam i
-  N.GlobalBound name -> (,) nullSubst <$> findGlobal name
-  N.Integer _ -> return (nullSubst, Integer)
-  N.Lambda body -> do
+inferExpr (N.ParamBound i) = (,) nullSubst <$> findParam i
+inferExpr (N.GlobalBound name) = (,) nullSubst <$> findGlobal name
+inferExpr (N.Integer _) = return (nullSubst, Integer)
+inferExpr (N.Lambda body) = do
     tv <- fresh
     (s, ret) <- withParam tv $ inferExpr body
     return (s, Function (apply s tv) ret)
-  N.Apply a b -> do
+inferExpr (N.Apply a b) = do
     tv <- fresh
     (s1, a_ty) <- inferExpr a
     (s2, b_ty) <- withSubst s1 $ inferExpr b
     s3 <- unify (apply s2 a_ty) (Function b_ty tv)
     return (s3 `compose` s2 `compose` s1, apply s3 tv)
-  N.BinaryOp op a b ->
+inferExpr (N.BinaryOp op a b) =
     let op_type = Integer in
     do
       (s1, a_ty) <- inferExpr a
@@ -152,16 +151,16 @@ inferExpr e = case e of
       s3 <- unify (apply s2 a_ty) op_type
       s4 <- unify (apply s3 b_ty) op_type
       return (s4 `compose` s3 `compose` s2 `compose` s1, op_type)
-  N.SingleOp op x ->
+inferExpr (N.SingleOp op x) =
     let op_type = Integer in
     do
       (s1, ty) <- inferExpr x
       s2 <- unify (apply s1 ty) op_type
       return (s2 `compose` s1, op_type)
-  N.Tuple xs -> (foldr compose nullSubst *** Tuple) <$> mapAndUnzipM inferExpr xs
+inferExpr (N.Tuple xs) = (foldr compose nullSubst *** Tuple) <$> mapAndUnzipM inferExpr xs
 
 inferDefs :: N.Code -> Infer ()
-inferDefs ((N.Def name (N.Name body)):xs) = do
+inferDefs (N.Def name (N.Name body):xs) = do
   (s, t) <- inferExpr body
   withGlobal name t $ withSubst s $ inferDefs xs
 inferDefs [] = return ()
