@@ -28,6 +28,7 @@ dependencies:
 - llvm-hs-pure
 - llvm-hs
 - text
+- extra
 
 library:
   source-dirs: src
