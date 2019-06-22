@@ -66,10 +66,15 @@ initEnv = Env Nothing []
 initArg :: [AST.Operand] -> Env
 initArg xs = initEnv { args = xs }
 
-genExpr :: (IR.MonadIRBuilder m, IR.MonadModuleBuilder m, MonadFix m, MonadReader Env m) => Expr -> m AST.Operand
+type NameMap = Map.Map String AST.Operand
+
+initNameMap :: NameMap
+initNameMap = Map.empty
+
+genExpr :: (IR.MonadIRBuilder m, IR.MonadModuleBuilder m, MonadFix m, MonadReader Env m, MonadState NameMap m) => Expr -> m AST.Operand
 genExpr (Integer i) = IR.inttoptr (constInt i) genericPtr
 genExpr (Parameter i) = (!! i) . args <$> ask
-genExpr (NameRef name) = error $ "Invalid reference to \"" ++ name ++ "\""
+genExpr (NameRef name) = gets (Map.! name)
 genExpr (FunctionRef i) = IR.bitcast (namedFunction functionType $ nameFunction i) genericPtr
 genExpr (Call f a) = do
   f' <- genExpr f
@@ -151,18 +156,13 @@ genExpr (If c t e) = mdo
 genFunction :: (IR.MonadModuleBuilder m, MonadFix m) => String -> Function -> m AST.Operand
 genFunction name (Function n expr) =
   IR.function (AST.mkName name) params genericPtr $ \args ->
-    IR.ret =<< runReaderT (genExpr expr) (initArg args)
+    -- prevent the use of NameRef by passing empty NameMap as a initial state
+    IR.ret =<< evalStateT (runReaderT (genExpr expr) (initArg args)) initNameMap
   where
     params = replicate n (genericPtr, IR.NoParameterName)
 
-type NameMap = Map.Map String AST.Operand
-
-initNameMap :: NameMap
-initNameMap = Map.empty
-
 genTopExpr :: (IR.MonadIRBuilder m, IR.MonadModuleBuilder m, MonadFix m, MonadState NameMap m) => Expr -> m AST.Operand
-genTopExpr (NameRef name) = gets (Map.! name)
-genTopExpr e              = runReaderT (genExpr e) initEnv
+genTopExpr e = runReaderT (genExpr e) initEnv
 
 genDef :: (IR.MonadIRBuilder m, IR.MonadModuleBuilder m, MonadFix m, MonadState NameMap m) => Def -> m ()
 genDef (Def name (Name body)) = do
