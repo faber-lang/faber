@@ -77,10 +77,10 @@ data TypeError
   | UnboundVariable String
   deriving (Show, Eq)
 
-runInfer :: Infer (Subst, Type) -> Either TypeError Type
+runInfer :: Infer a -> Either TypeError a
 runInfer m = case evalState (runReaderT (runExceptT m) initEnv) initUnique of
-  Left err     -> Left err
-  Right (_, t) -> Right t
+  Left err -> Left err
+  Right a  -> Right a
 
 fresh :: Infer Type
 fresh = do
@@ -100,6 +100,12 @@ findGlobal s = do
 
 withParam :: Type -> Infer a -> Infer a
 withParam = local . flip appendParam
+
+flip3 :: (a -> b -> c -> d) -> b -> c -> a -> d
+flip3 f b c a = f a b c
+
+withGlobal :: String -> Type -> Infer a -> Infer a
+withGlobal name = local . flip3 appendGlobal name
 
 withSubst :: Subst -> Infer a -> Infer a
 withSubst = local . apply
@@ -154,5 +160,11 @@ inferExpr e = case e of
       return (s2 `compose` s1, op_type)
   N.Tuple xs -> (foldr compose nullSubst *** Tuple) <$> mapAndUnzipM inferExpr xs
 
-typing :: N.Expr -> Either TypeError Type
-typing = runInfer . inferExpr
+inferDefs :: N.Code -> Infer ()
+inferDefs ((N.Def name (N.Name body)):xs) = do
+  (s, t) <- inferExpr body
+  withGlobal name t $ withSubst s $ inferDefs xs
+inferDefs [] = return ()
+
+typing :: N.Code -> Either TypeError ()
+typing = runInfer . inferDefs
