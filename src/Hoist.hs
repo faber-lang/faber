@@ -18,7 +18,7 @@ data Expr
   | Tuple [Expr]
   | NthOf Int Expr
   | LocalLet Expr Expr
-  | LetBound
+  | LocalBound
   | Ref Expr
   | Assign Expr Expr
   | Deref Expr
@@ -50,7 +50,7 @@ hoistFun e = do
   gets (FunctionRef . pred <$> length)
 
 convertApply :: Expr -> Expr -> Hoist Expr
-convertApply a b = return $ LocalLet a $ Call (NthOf 0 LetBound) [NthOf 1 LetBound, b]
+convertApply a b = return $ LocalLet a $ Call (NthOf 0 LocalBound) [NthOf 1 LocalBound, b]
 
 hoistExpr :: C.Expr -> Hoist Expr
 -- function hoisting
@@ -71,7 +71,7 @@ hoistExpr (C.Assign a b)      = Assign <$> hoistExpr a <*> hoistExpr b
 hoistExpr (C.Deref x)         = Deref <$> hoistExpr x
 hoistExpr (C.If c t e)        = If <$> hoistExpr c <*> hoistExpr t <*> hoistExpr e
 hoistExpr (C.LocalLet a b)    = LocalLet <$> hoistExpr a <*> hoistExpr b
-hoistExpr C.LetBound          = return LetBound
+hoistExpr C.LocalBound          = return LocalBound
 
 hoistDef :: C.Def -> Hoist Def
 hoistDef (C.Def name (C.Name body)) = Def name . Name <$> hoistExpr body

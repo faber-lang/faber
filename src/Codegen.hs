@@ -98,7 +98,7 @@ genExpr (NthOf i e) = do
 genExpr (LocalLet e x) = do
   e' <- genExpr e
   withBound e' $ genExpr x
-genExpr LetBound = getBound
+genExpr LocalBound = getBound
 genExpr (BinaryOp op l r) = join $ apply_op <$> genExpr l <*> genExpr r
   where
     apply_op a b = do

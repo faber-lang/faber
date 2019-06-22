@@ -18,7 +18,7 @@ data Expr
   | Deref Expr
   | If Expr Expr Expr
   | LocalLet Expr Expr
-  | LetBound
+  | LocalBound
   deriving (Show, Eq)
 
 data DefBody
@@ -53,9 +53,9 @@ makeThunk e = Ref $ Tuple [Integer 0, code]
 evalThunk :: Expr -> Expr
 evalThunk e = LocalLet (Deref e) $ If cond then_ else_
   where
-    cond  = NthOf 0 LetBound
-    then_ = NthOf 1 LetBound
-    else_ = Apply (NthOf 1 LetBound) e
+    cond  = NthOf 0 LocalBound
+    then_ = NthOf 1 LocalBound
+    else_ = Apply (NthOf 1 LocalBound) e
 
 isValue :: N.Expr -> Bool
 isValue N.Integer{}     = True

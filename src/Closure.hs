@@ -22,7 +22,7 @@ data Expr
   | Deref Expr
   | If Expr Expr Expr
   | LocalLet Expr Expr
-  | LetBound
+  | LocalBound
   deriving (Show, Eq)
 
 data DefBody
@@ -67,7 +67,7 @@ convertBody (L.Assign a b) = Assign <$> convertBody a <*> convertBody b
 convertBody (L.Deref x) = Deref <$> convertBody x
 convertBody (L.If c t e) = If <$> convertBody c <*> convertBody t <*> convertBody e
 convertBody (L.LocalLet a b) = LocalLet <$> convertBody a <*> convertBody b
-convertBody L.LetBound = return LetBound
+convertBody L.LocalBound = return LocalBound
 
 -- convert a top-level expression
 convertExpr :: L.Expr -> Expr
@@ -88,7 +88,7 @@ convertExpr (L.Assign a b) = Assign (convertExpr a) (convertExpr b)
 convertExpr (L.Deref x) = Deref $ convertExpr x
 convertExpr (L.If c t e) = If (convertExpr c) (convertExpr t) (convertExpr e)
 convertExpr (L.LocalLet a b) = LocalLet (convertExpr a) (convertExpr b)
-convertExpr L.LetBound = LetBound
+convertExpr L.LocalBound = LocalBound
 
 convertDef :: L.Def -> Def
 convertDef (L.Def name (L.Name body)) = Def name $ Name $ convertExpr body
