@@ -23,6 +23,7 @@ data Expr
   | BinaryOp Op.BinaryOp Expr Expr
   | SingleOp Op.SingleOp Expr
   | LetIn [NameDef] Expr
+  | If Expr Expr Expr
   deriving (Show, Eq)
 
 data NameDef
@@ -56,7 +57,7 @@ parens :: Parser a -> Parser a
 parens = between (symbol "(") (symbol ")")
 
 rws :: [String]
-rws = ["let", "in", "where", "name"]
+rws = ["let", "in", "where", "name", "if", "then", "else"]
 
 rword :: String -> Parser ()
 rword w = (lexeme . try) (C.string w *> notFollowedBy C.alphaNumChar)
@@ -87,6 +88,15 @@ letIn = do
   rword "in"
   LetIn defs <$> expr
 
+ifThenElse :: Parser Expr
+ifThenElse = do
+  rword "if"
+  cond <- expr
+  rword "then"
+  then_ <- expr
+  rword "else"
+  If cond then_ <$> expr
+
 operators :: [[Operator Parser Expr]]
 operators =
   [ [ InfixL (Apply <$ symbol "") ],
@@ -97,8 +107,9 @@ operators =
 
 term :: Parser Expr
 term = try (parens expr)
-  <|> letIn
   <|> tuple
+  <|> letIn
+  <|> ifThenElse
   <|> lambda
   <|> Variable <$> identifier
   <|> Integer <$> integer
