@@ -12,10 +12,15 @@ import           Utils
 
 type TVar = Int
 
+data Level
+  = Free Int
+  | Bound
+  deriving (Show, Eq)
+
 data Type
   = Integer
   | Function Type Type
-  | Variable TVar Int
+  | Variable TVar Level
   | Tuple [Type]
   deriving (Show, Eq)
 
@@ -94,7 +99,7 @@ fresh = do
   (Unique i) <- get
   (_, level) <- ask
   modify incrUnique
-  return $ Variable i level
+  return $ Variable i (Free level)
 
 findParam :: Int -> Infer Type
 findParam i = do
