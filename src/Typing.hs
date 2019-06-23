@@ -181,6 +181,12 @@ generalize t = do
     extract (Variable i Bound) = i
     extract _                  = error "unreachable"
 
+instantiate :: Scheme -> Infer Type
+instantiate (Forall xs t) = do
+  xs' <- replicateM (length xs) freshFree
+  let s = Map.fromList $ zip xs xs'
+  return $ apply s t
+
 inferExpr :: N.Expr -> Infer (Subst, Type)
 inferExpr (N.ParamBound i) = (,) nullSubst <$> findParam i
 inferExpr (N.GlobalBound name) = (,) nullSubst <$> findGlobal name
