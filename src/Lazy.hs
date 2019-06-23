@@ -57,6 +57,7 @@ liftVars (N.BinaryOp op a b)       = N.BinaryOp op <$> liftVars a <*> liftVars b
 liftVars (N.SingleOp op x)         = N.SingleOp op <$> liftVars x
 liftVars (N.Tuple xs)              = N.Tuple <$> mapM liftVars xs
 liftVars (N.LetIn defs body)       = N.LetIn <$> mapM liftVars defs <*> local (second succ) (liftVars body)
+liftVars (N.If c t e)              = N.If <$> liftVars c <*> liftVars t <*> liftVars e
 
 makeEvaledThunk :: Expr -> Expr
 makeEvaledThunk e = Ref $ Tuple [Integer 1, e]
@@ -85,6 +86,7 @@ isValue N.GlobalBound{} = False
 isValue N.BinaryOp{}    = False
 isValue N.SingleOp{}    = False
 isValue N.LetIn{}       = False
+isValue N.If{}          = False
 
 lazify :: N.Expr -> Expr
 lazify (N.ParamBound i)  = ParamBound i
@@ -104,6 +106,7 @@ lazyExpr (N.SingleOp op x)   = SingleOp op (lazyExpr x)
 lazyExpr (N.Tuple xs)        = Tuple $ map lazyExpr xs
 lazyExpr (N.Lambda body)     = Lambda $ lazyExpr body
 lazyExpr (N.LetIn defs body) = LetIn (map lazify defs) $ lazyExpr body
+lazyExpr (N.If c t e)        = If (lazyExpr c) (lazyExpr t) (lazyExpr e)
 
 lazyNameDef :: N.NameDef -> NameDef
 lazyNameDef (N.NameDef name body) = NameDef name $ lazify body

@@ -12,6 +12,7 @@ data Expr
   | SingleOp Op.SingleOp Expr
   | Tuple [Expr]
   | LetIn [NameDef] Expr
+  | If Expr Expr Expr
   deriving (Show, Eq)
 
 data NameDef
@@ -34,6 +35,7 @@ desugarExpr (P.BinaryOp op a b) = BinaryOp op (desugarExpr a) (desugarExpr b)
 desugarExpr (P.SingleOp op x)   = SingleOp op $ desugarExpr x
 desugarExpr (P.Tuple xs)        = Tuple $ map desugarExpr xs
 desugarExpr (P.LetIn defs x)    = LetIn (map desugarNameDef defs) $ desugarExpr x
+desugarExpr (P.If c t e)        = If (desugarExpr c) (desugarExpr t) (desugarExpr e)
 
 desugarNameDef :: P.NameDef -> NameDef
 desugarNameDef (P.NameDef name ps body []) = NameDef name $ desugarLambda ps $ desugarExpr body

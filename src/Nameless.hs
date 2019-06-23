@@ -18,6 +18,7 @@ data Expr
   | SingleOp Op.SingleOp Expr
   | Tuple [Expr]
   | LetIn [Expr] Expr
+  | If Expr Expr Expr
   deriving (Show, Eq)
 
 data NameDef
@@ -90,6 +91,7 @@ namelessExpr (D.Integer i) = return $ Integer i
 namelessExpr (D.BinaryOp op a b) = BinaryOp op <$> namelessExpr a <*> namelessExpr b
 namelessExpr (D.SingleOp op x) = SingleOp op <$> namelessExpr x
 namelessExpr (D.Tuple xs) = Tuple <$> mapM namelessExpr xs
+namelessExpr (D.If c t e) = If <$> namelessExpr c <*> namelessExpr t <*> namelessExpr e
 
 namelessDefs :: [D.Def] -> Nameless [Def]
 namelessDefs (D.Name (D.NameDef name body):xs) = do
