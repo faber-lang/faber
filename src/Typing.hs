@@ -237,6 +237,13 @@ inferExpr (N.SingleOp op x) =
       s2 <- unify (apply s1 ty) op_type
       return (s2 `compose` s1, op_type)
 inferExpr (N.Tuple xs) = second Tuple <$> inferExprs xs
+inferExpr (N.If c t e) = do
+  (s1, t1) <- inferExpr c
+  (s2, t2) <- inferExpr t
+  (s3, t3) <- inferExpr e
+  s4 <- unify t1 Integer   -- TODO: Bool
+  s5 <- unify t2 t3
+  return (s1 `compose` s2 `compose` s3 `compose` s4 `compose` s5, apply s5 t2)
 
 inferDefs :: N.Code -> Infer ()
 inferDefs (N.Name (N.NameDef name body):xs) = do
