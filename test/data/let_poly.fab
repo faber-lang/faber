@@ -1,5 +1,9 @@
 name id x = x
 
-name main = (id succ) (id 1)
+name v = const id id 1 + const 2 1
+  where
+    const x = \a => x
+
+name main = (id succ) (id v)
   where
     succ x = x + 1
