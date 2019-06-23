@@ -1,9 +1,8 @@
 module Main where
 
 import Compile
-import Parse
 
-import qualified Data.ByteString    as BS
+import qualified Data.ByteString.Char8 as BS
 import           System.Environment
 import           System.IO
 
