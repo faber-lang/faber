@@ -96,16 +96,16 @@ runInfer m = case evalState (runReaderT (runExceptT m) (initEnv, 0)) initUnique 
   Left err -> Left err
   Right a  -> Right a
 
-fresh :: Level -> State Unique Type
+fresh :: Level -> Infer Type
 fresh level = do
   (Unique i) <- get
   modify incrUnique
   return $ Variable i level
 
 freshFree :: Infer Type
-freshFree = (lift . lift . fresh) =<< asks (Free . snd)
+freshFree = fresh =<< asks (Free . snd)
 
-freshBound :: State Unique Type
+freshBound :: Infer Type
 freshBound = fresh Bound
 
 findParam :: Int -> Infer Type
@@ -157,7 +157,8 @@ bind i t | occursCheck i t = throwError $ InfiniteType i t
 occursCheck :: Substitutable a => Int -> a -> Bool
 occursCheck i t = i `Set.member` ftv t
 
-generalizer :: Type -> ReaderT Int (State Unique) Subst
+-- generalization and instantiation
+generalizer :: Type -> Infer Subst
 generalizer (Function a b) = do
   s1 <- generalizer a
   s2 <- generalizer (apply s1 b)
@@ -165,15 +166,15 @@ generalizer (Function a b) = do
 generalizer Integer = return nullSubst
 generalizer (Tuple xs) = foldr compose nullSubst <$> mapM generalizer xs
 generalizer (Variable i (Free level)) = do
-  cLevel <- ask
+  cLevel <- asks snd
   if cLevel < level
-  then lift $ Map.singleton i <$> freshBound
+  then bind i =<< freshBound
   else return nullSubst
 generalizer (Variable _ Bound) = return nullSubst
 
 generalize :: Type -> Infer Scheme
 generalize t = do
-  s <- (lift . lift . runReaderT (generalizer t)) =<< asks snd
+  s <- generalizer t
   return $ Forall (extractAll s) (apply s t)
   where
     extractAll = map extract . Map.elems
