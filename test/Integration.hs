@@ -38,3 +38,4 @@ spec = do
     it "many arguments" $ execExpr "(\\a b c d => a + b + c + d) 1 2 3 4" `shouldReturn` "10\n"
 
     it "let-in and where" $ execBS $(embedFile "test/data/let_in.fab") `shouldReturn` "47\n"
+    it "church numerals" $ execBS $(embedFile "test/data/church.fab") `shouldReturn` "15\n"
