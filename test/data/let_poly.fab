@@ -1,0 +1,5 @@
+name id x = x
+
+name main = (id succ) (id 1)
+  where
+    succ x = x + 1
