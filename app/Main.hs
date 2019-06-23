@@ -5,6 +5,7 @@ import Parse
 
 import qualified Data.ByteString    as BS
 import           System.Environment
+import           System.IO
 
 main :: IO ()
 main = do
@@ -12,4 +13,4 @@ main = do
   content <- readFile filename
   case compileToModule filename content of
     Right e  -> BS.putStrLn =<< moduleToLLVMAssembly e
-    Left err -> print err
+    Left err -> hPrint stderr err
