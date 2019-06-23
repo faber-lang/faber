@@ -105,6 +105,10 @@ spec = do
     it "parse let-in with where clause" $ do
       parse "let a = b where b = 1 in a" `shouldBe` LetIn [NameDef "a" [] (var "b") [NameDef "b" [] (int 1) []]] (var "a")
 
+    it "parse if-then-else" $ do
+      parse "if 1 then a + 1 else b + 1" `shouldBe` If (int 1) (var "a" `add` int 1) (var "b" `add` int 1)
+      parse "if 1 then if 0 then 1 else 2 else if 1 then 1 else 2" `shouldBe` If (int 1) (If (int 0) (int 1) (int 2)) (If (int 1) (int 1) (int 2))
+
   describe "definition" $ do
     it "parse simple name definitions" $ do
       parseCode "" "name def x y = x + y\nname main = 1" `shouldBe` Right [Name (NameDef "def" ["x", "y"] (add (var "x") (var "y")) []), Name (NameDef "main" [] (int 1) [])]
