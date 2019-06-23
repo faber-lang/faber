@@ -15,7 +15,7 @@ type TVar = Int
 data Type
   = Integer
   | Function Type Type
-  | Variable TVar
+  | Variable TVar Int
   | Tuple [Type]
   deriving (Show, Eq)
 
@@ -49,13 +49,13 @@ class Substitutable a where
   ftv :: a -> Set.Set Int
 
 instance Substitutable Type where
-  apply s t@(Variable i) = Map.findWithDefault t i s
-  apply s (Function a b) = Function (apply s a) (apply s b)
-  apply s (Tuple xs)     = Tuple $ apply s xs
-  apply s Integer        = Integer
+  apply s t@(Variable i _) = Map.findWithDefault t i s
+  apply s (Function a b)   = Function (apply s a) (apply s b)
+  apply s (Tuple xs)       = Tuple $ apply s xs
+  apply s Integer          = Integer
 
   ftv (Function a b) = ftv a `Set.union` ftv b
-  ftv (Variable i)   = Set.singleton i
+  ftv (Variable i _) = Set.singleton i
   ftv (Tuple xs)     = ftv xs
   ftv Integer        = Set.empty
 
@@ -93,7 +93,7 @@ fresh :: Infer Type
 fresh = do
   (Unique i) <- get
   modify incrUnique
-  return $ Variable i
+  return $ Variable i 0  -- level is dummy
 
 findParam :: Int -> Infer Type
 findParam i = do
@@ -127,15 +127,15 @@ unify (Function a1 b1) (Function a2 b2) = do
   s_a <- unify a1 a2
   s_b <- unify (apply s_a b1) (apply s_a b2)
   return $ s_a `compose` s_b
-unify (Variable i) t = bind i t
-unify t (Variable i) = bind i t
+unify (Variable i _) t = bind i t
+unify t (Variable i _) = bind i t
 unify Integer Integer = return nullSubst
 unify (Tuple a) (Tuple b) = foldr compose nullSubst <$> zipWithM unify a b
 unify t1 t2 = throwError $ UnificationFail t1 t2
 
 bind :: Int -> Type -> Infer Subst
-bind i t | t == Variable i = return nullSubst
-         | occursCheck i t = throwError $ InfiniteType i t
+bind i (Variable i' _) | i' == i = return nullSubst
+bind i t | occursCheck i t = throwError $ InfiniteType i t
          | otherwise       = return $ Map.singleton i t
 
 occursCheck :: Substitutable a => Int -> a -> Bool
