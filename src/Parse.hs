@@ -56,7 +56,7 @@ parens :: Parser a -> Parser a
 parens = between (symbol "(") (symbol ")")
 
 rws :: [String]
-rws = ["let", "in", "where", "end"]
+rws = ["let", "in", "where", "name"]
 
 rword :: String -> Parser ()
 rword w = (lexeme . try) (C.string w *> notFollowedBy C.alphaNumChar)
@@ -116,11 +116,7 @@ nameDef = do
   defs <- fromMaybe [] <$> optional where_
   return $ Def name $ Name params body defs
   where
-    where_ = do
-      rword "where"
-      defs <- definitions
-      rword "end"
-      return defs
+    where_ = rword "where" >> definitions
 
 definition :: Parser Def
 definition = nameDef
@@ -132,7 +128,9 @@ definitions = many (optional hyphen >> definition)
 
 -- wrap them up
 code :: Parser Code
-code = definitions
+code = some (delim >> definition)
+  where
+    delim = rword "name"
 
 parser :: Parser Code
 parser = between space eof code

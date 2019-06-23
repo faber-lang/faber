@@ -10,7 +10,7 @@ parse s = case parseCode "" code of
   Left (ParseError err) -> error err
   Right t               -> destruct t
   where
-    code = "main = " ++ s
+    code = "name main = " ++ s
     destruct [Def _ (Name [] body [])] = body
 
 add :: Expr -> Expr -> Expr
@@ -97,4 +97,4 @@ spec = do
 
   describe "definition" $ do
     it "parse simple name definitions" $ do
-      parseCode "" "- def x y = x + y\n- main = 1" `shouldBe` Right [Def "def" (Name ["x", "y"] (add (var "x") (var "y")) []), Def "main" (Name [] (int 1) [])]
+      parseCode "" "name def x y = x + y\nname main = 1" `shouldBe` Right [Def "def" (Name ["x", "y"] (add (var "x") (var "y")) []), Def "main" (Name [] (int 1) [])]
