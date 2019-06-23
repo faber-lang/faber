@@ -9,15 +9,19 @@ import qualified Nameless as Fab
 import qualified Parse    as Fab
 import qualified Typing   as Fab
 
-import           Data.Either.Extra (mapLeft)
-import           Data.Text
-import qualified LLVM.AST          as LLVM
+import Data.ByteString
+import Data.Either.Extra (mapLeft)
+
+import qualified LLVM.AST     as LLVMAST
+import qualified LLVM.Context as LLVM
+import qualified LLVM.Module  as LLVM
 
 data CompileError
   = ParseError Fab.ParseError
   | TypeError Fab.TypeError
+  deriving Show
 
-compileToModule :: String -> String -> Either CompileError LLVM.Module
+compileToModule :: String -> String -> Either CompileError LLVMAST.Module
 compileToModule filename source = do
   ast <- mapLeft ParseError $ Fab.parseCode filename source
   ir  <- return $ conv1 ast
@@ -26,3 +30,6 @@ compileToModule filename source = do
   where
     conv1 = Fab.nameless . Fab.desugar
     conv2 = Fab.codegen . Fab.hoist . Fab.closure . Fab.lazy
+
+moduleToLLVMAssembly :: LLVMAST.Module -> IO ByteString
+moduleToLLVMAssembly m = LLVM.withContext $ \ctx -> LLVM.withModuleFromAST ctx m LLVM.moduleLLVMAssembly

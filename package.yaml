@@ -29,6 +29,7 @@ dependencies:
 - llvm-hs
 - text
 - extra
+- bytestring
 
 library:
   source-dirs: src
