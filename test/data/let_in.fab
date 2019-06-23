@@ -1,0 +1,19 @@
+name x =
+  let
+  - i = var
+  - j x = x + 1
+  in
+    let
+    - f g x = g (g x)
+    - g x = x * 2
+    in
+    f g (j i)
+  where
+    var = 10
+
+name main = func x
+  where
+  - func y =
+      let a = 1 in
+      let b = 2 in
+      a + b + y

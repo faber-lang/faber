@@ -1,24 +1,35 @@
 module Compile where
 
-import qualified Closure  as C
-import qualified Codegen  as Gen
-import qualified Desugar  as D
-import qualified Hoist    as H
-import qualified Lazy     as L
-import qualified Nameless as N
-import qualified Parse    as P
-import qualified Typing   as T
+import qualified Closure  as Fab
+import qualified Codegen  as Fab
+import qualified Desugar  as Fab
+import qualified Hoist    as Fab
+import qualified Lazy     as Fab
+import qualified Nameless as Fab
+import qualified Parse    as Fab
+import qualified Typing   as Fab
 
-import Control.Exception
-import Data.Text
+import Data.ByteString
+import Data.Either.Extra (mapLeft)
 
-compile :: P.Code -> IO Text
-compile x = do
-  () <- evaluate t
-  Gen.toLLVM c
+import qualified LLVM.AST     as LLVMAST
+import qualified LLVM.Context as LLVM
+import qualified LLVM.Module  as LLVM
+
+data CompileError
+  = ParseError Fab.ParseError
+  | TypeError Fab.TypeError
+  deriving Show
+
+compileToModule :: String -> String -> Either CompileError LLVMAST.Module
+compileToModule filename source = do
+  ast <- mapLeft ParseError $ Fab.parseCode filename source
+  ir  <- return $ conv1 ast
+  ()  <- mapLeft TypeError $ Fab.typing ir
+  return $ conv2 ir
   where
-    e = N.nameless $ D.desugar x
-    t = case T.typing e of
-          Right t  -> t
-          Left err -> error $ show err
-    c = Gen.codegen $ H.hoist $ C.convert $ L.lazy e
+    conv1 = Fab.nameless . Fab.desugar
+    conv2 = Fab.codegen . Fab.hoist . Fab.closure . Fab.lazy
+
+moduleToLLVMAssembly :: LLVMAST.Module -> IO ByteString
+moduleToLLVMAssembly m = LLVM.withContext $ \ctx -> LLVM.withModuleFromAST ctx m LLVM.moduleLLVMAssembly

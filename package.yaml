@@ -29,6 +29,7 @@ dependencies:
 - llvm-hs
 - text
 - extra
+- bytestring
 
 library:
   source-dirs: src
@@ -46,7 +47,7 @@ executables:
 
 tests:
   faber-test:
-    main:                Spec.hs
+    main:                Main.hs
     source-dirs:         test
     ghc-options:
     - -threaded
@@ -56,3 +57,6 @@ tests:
     - faber
     - hspec
     - hspec-discover
+    - temporary
+    - typed-process
+    - file-embed

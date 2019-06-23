@@ -1,0 +1,16 @@
+name zero f x = x
+name one f x = f x
+
+name plus m n f x = m f (n f x)
+name succ = plus one
+name mult m n f = m (n f)
+
+name eval n = n (\x => x + 1) 0
+
+name two = succ (succ zero)
+name three = plus two one
+name five = plus three two
+
+name main = eval n
+  where
+  - n = mult five three
