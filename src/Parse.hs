@@ -22,14 +22,14 @@ data Expr
   | Tuple [Expr]
   | BinaryOp Op.BinaryOp Expr Expr
   | SingleOp Op.SingleOp Expr
-  | LetIn [Def] Expr
+  | LetIn [NameDef] Expr
   deriving (Show, Eq)
 
-data DefBody
-  = Name [Ident] Expr [Def]
+data NameDef
+  = NameDef String [Ident] Expr [NameDef]
   deriving (Show, Eq)
 
-data Def = Def String DefBody deriving (Show, Eq)
+newtype Def = Name NameDef deriving (Show, Eq)
 
 type Code = [Def]
 
@@ -83,7 +83,7 @@ lambda = do
 letIn :: Parser Expr
 letIn = do
   rword "let"
-  defs <- definitions
+  defs <- nameDefs
   rword "in"
   LetIn defs <$> expr
 
@@ -107,30 +107,31 @@ expr :: Parser Expr
 expr = makeExprParser term operators
 
 -- definition parser
-nameDef :: Parser Def
+nameDef :: Parser NameDef
 nameDef = do
   name <- identifier
   params <- many identifier
   symbol "="
   body <- expr
   defs <- fromMaybe [] <$> optional where_
-  return $ Def name $ Name params body defs
+  return $ NameDef name params body defs
   where
-    where_ = rword "where" >> definitions
+    where_ = rword "where" >> nameDefs
 
-definition :: Parser Def
-definition = nameDef
-
-definitions :: Parser [Def]
-definitions = many (optional hyphen >> definition)
+nameDefs :: Parser [NameDef]
+nameDefs = many (optional hyphen >> nameDef)
   where
     hyphen = symbol "-"
 
+definition :: Parser Def
+definition = Name <$> (rword "name" >> nameDef)
+
+definitions :: Parser [Def]
+definitions = some definition
+
 -- wrap them up
 code :: Parser Code
-code = some (delim >> definition)
-  where
-    delim = rword "name"
+code = definitions
 
 parser :: Parser Code
 parser = between space eof code
