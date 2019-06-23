@@ -76,7 +76,7 @@ initUnique = Unique 0
 incrUnique :: Unique -> Unique
 incrUnique (Unique i) = Unique $ i + 1
 
-type Infer = ExceptT TypeError (ReaderT TypeEnv (State Unique))
+type Infer = ExceptT TypeError (ReaderT (TypeEnv, Int) (State Unique))
 
 data TypeError
   = UnificationFail Type Type
@@ -85,42 +85,46 @@ data TypeError
   deriving (Show, Eq)
 
 runInfer :: Infer a -> Either TypeError a
-runInfer m = case evalState (runReaderT (runExceptT m) initEnv) initUnique of
+runInfer m = case evalState (runReaderT (runExceptT m) (initEnv, 0)) initUnique of
   Left err -> Left err
   Right a  -> Right a
 
 fresh :: Infer Type
 fresh = do
   (Unique i) <- get
+  (_, level) <- ask
   modify incrUnique
-  return $ Variable i 0  -- level is dummy
+  return $ Variable i level
 
 findParam :: Int -> Infer Type
 findParam i = do
-  env <- ask
+  (env, _) <- ask
   return $ lookupParam env i
 
 findLocal :: LetIndex -> Infer Type
 findLocal (LetIndex _ _ local inner) = do
-  env <- ask
+  (env, _) <- ask
   return $ lookupLocal env local inner
 
 findGlobal :: String -> Infer Type
 findGlobal s = do
-  env <- ask
+  (env, _) <- ask
   maybe (throwError $ UnboundVariable s) return $ lookupGlobal env s
 
 withParam :: Type -> Infer a -> Infer a
-withParam = local . flip appendParam
+withParam = local . first . flip appendParam
 
 withGlobal :: String -> Type -> Infer a -> Infer a
-withGlobal name = local . flip3 appendGlobal name
+withGlobal name = local . first . flip3 appendGlobal name
 
 withSubst :: Subst -> Infer a -> Infer a
-withSubst = local . apply
+withSubst = local . first . apply
 
 withLocals :: [Type] -> Infer a -> Infer a
-withLocals = local . flip appendLocal
+withLocals = local . first . flip appendLocal
+
+pushLevel :: Infer a -> Infer a
+pushLevel = local $ second succ
 
 unify :: Type -> Type -> Infer Subst
 unify (Function a1 b1) (Function a2 b2) = do
@@ -157,7 +161,7 @@ inferExpr (N.Apply a b) = do
     s3 <- unify (apply s2 a_ty) (Function b_ty tv)
     return (s3 `compose` s2 `compose` s1, apply s3 tv)
 inferExpr (N.LetIn defs body) = do
-    (s1, tys) <- first (foldr compose nullSubst) <$> mapAndUnzipM inferExpr defs
+    (s1, tys) <- first (foldr compose nullSubst) <$> pushLevel (mapAndUnzipM inferExpr defs)
     (s2, ty) <-
       withSubst s1 $
         withLocals tys $
@@ -181,7 +185,7 @@ inferExpr (N.Tuple xs) = (foldr compose nullSubst *** Tuple) <$> mapAndUnzipM in
 
 inferDefs :: N.Code -> Infer ()
 inferDefs (N.Name (N.NameDef name body):xs) = do
-  (s, t) <- inferExpr body
+  (s, t) <- pushLevel $ inferExpr body
   withGlobal name t $ withSubst s $ inferDefs xs
 inferDefs [] = return ()
 
