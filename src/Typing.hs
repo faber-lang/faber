@@ -29,7 +29,7 @@ data Scheme = Forall [TVar] Type
 data TypeEnv =
   TypeEnv { params  :: [Type]
           , locals  :: [[Type]]
-          , globals :: Map.Map String Type }
+          , globals :: Map.Map String Scheme }
 
 initEnv :: TypeEnv
 initEnv = TypeEnv [] [] Map.empty
@@ -37,13 +37,13 @@ lookupParam :: TypeEnv -> Int -> Type
 lookupParam (TypeEnv env _ _)  = (env !!)
 lookupLocal :: TypeEnv -> Int -> Int -> Type
 lookupLocal (TypeEnv _ env _)  = (!!) . (env !!)
-lookupGlobal :: TypeEnv -> String -> Maybe Type
+lookupGlobal :: TypeEnv -> String -> Maybe Scheme
 lookupGlobal (TypeEnv _ _ env) = flip Map.lookup env
 appendParam :: TypeEnv -> Type -> TypeEnv
 appendParam (TypeEnv ps ls gs) t = TypeEnv (t:ps) ls gs
 appendLocal :: TypeEnv -> [Type] -> TypeEnv
 appendLocal (TypeEnv ps ls gs) t = TypeEnv ps (t:ls) gs
-appendGlobal :: TypeEnv -> String -> Type -> TypeEnv
+appendGlobal :: TypeEnv -> String -> Scheme -> TypeEnv
 appendGlobal (TypeEnv ps ls gs) k v = TypeEnv ps ls $ Map.insert k v gs
 
 type Subst = Map.Map TVar Type
@@ -65,6 +65,10 @@ instance Substitutable Type where
   ftv (Variable i _) = Set.singleton i
   ftv (Tuple xs)     = ftv xs
   ftv Integer        = Set.empty
+
+instance Substitutable Scheme where
+  apply s (Forall as t) = Forall as $ apply (foldr Map.delete s as) t
+  ftv (Forall as t) = ftv t `Set.difference` Set.fromList as
 
 instance Substitutable a => Substitutable [a] where
   apply = map . apply
@@ -118,7 +122,7 @@ findLocal (LetIndex _ _ local inner) = do
   (env, _) <- ask
   return $ lookupLocal env local inner
 
-findGlobal :: String -> Infer Type
+findGlobal :: String -> Infer Scheme
 findGlobal s = do
   (env, _) <- ask
   maybe (throwError $ UnboundVariable s) return $ lookupGlobal env s
@@ -126,7 +130,7 @@ findGlobal s = do
 withParam :: Type -> Infer a -> Infer a
 withParam = local . first . flip appendParam
 
-withGlobal :: String -> Type -> Infer a -> Infer a
+withGlobal :: String -> Scheme -> Infer a -> Infer a
 withGlobal name = local . first . flip3 appendGlobal name
 
 withSubst :: Subst -> Infer a -> Infer a
@@ -189,7 +193,7 @@ instantiate (Forall xs t) = do
 
 inferExpr :: N.Expr -> Infer (Subst, Type)
 inferExpr (N.ParamBound i) = (,) nullSubst <$> findParam i
-inferExpr (N.GlobalBound name) = (,) nullSubst <$> findGlobal name
+inferExpr (N.GlobalBound name) = (,) nullSubst <$> (instantiate =<< findGlobal name)
 inferExpr (N.LetBound i) = (,) nullSubst <$> findLocal i
 inferExpr (N.Integer _) = return (nullSubst, Integer)
 inferExpr (N.Lambda body) = do
@@ -203,7 +207,6 @@ inferExpr (N.Apply a b) = do
     s3 <- unify (apply s2 a_ty) (Function b_ty tv)
     return (s3 `compose` s2 `compose` s1, apply s3 tv)
 inferExpr (N.LetIn defs body) = do
-    vars <- replicateM (length defs) freshFree
     (s1, tys) <- first (foldr compose nullSubst) <$> pushLevel (mapAndUnzipM inferExpr defs)
     (s2, ty) <-
       withSubst s1 $
@@ -229,7 +232,8 @@ inferExpr (N.Tuple xs) = (foldr compose nullSubst *** Tuple) <$> mapAndUnzipM in
 inferDefs :: N.Code -> Infer ()
 inferDefs (N.Name (N.NameDef name body):xs) = do
   (s, t) <- pushLevel $ inferExpr body
-  withGlobal name t $ withSubst s $ inferDefs xs
+  a <- generalize t
+  withGlobal name a $ withSubst s $ inferDefs xs
 inferDefs [] = return ()
 
 typing :: N.Code -> Either TypeError ()
