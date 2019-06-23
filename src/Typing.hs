@@ -28,20 +28,20 @@ data Scheme = Forall [TVar] Type
 
 data TypeEnv =
   TypeEnv { params  :: [Type]
-          , locals  :: [[Type]]
+          , locals  :: [[Scheme]]
           , globals :: Map.Map String Scheme }
 
 initEnv :: TypeEnv
 initEnv = TypeEnv [] [] Map.empty
 lookupParam :: TypeEnv -> Int -> Type
 lookupParam (TypeEnv env _ _)  = (env !!)
-lookupLocal :: TypeEnv -> Int -> Int -> Type
+lookupLocal :: TypeEnv -> Int -> Int -> Scheme
 lookupLocal (TypeEnv _ env _)  = (!!) . (env !!)
 lookupGlobal :: TypeEnv -> String -> Maybe Scheme
 lookupGlobal (TypeEnv _ _ env) = flip Map.lookup env
 appendParam :: TypeEnv -> Type -> TypeEnv
 appendParam (TypeEnv ps ls gs) t = TypeEnv (t:ps) ls gs
-appendLocal :: TypeEnv -> [Type] -> TypeEnv
+appendLocal :: TypeEnv -> [Scheme] -> TypeEnv
 appendLocal (TypeEnv ps ls gs) t = TypeEnv ps (t:ls) gs
 appendGlobal :: TypeEnv -> String -> Scheme -> TypeEnv
 appendGlobal (TypeEnv ps ls gs) k v = TypeEnv ps ls $ Map.insert k v gs
@@ -117,7 +117,7 @@ findParam i = do
   (env, _) <- ask
   return $ lookupParam env i
 
-findLocal :: LetIndex -> Infer Type
+findLocal :: LetIndex -> Infer Scheme
 findLocal (LetIndex _ _ local inner) = do
   (env, _) <- ask
   return $ lookupLocal env local inner
@@ -136,7 +136,7 @@ withGlobal name = local . first . flip3 appendGlobal name
 withSubst :: Subst -> Infer a -> Infer a
 withSubst = local . first . apply
 
-withLocals :: [Type] -> Infer a -> Infer a
+withLocals :: [Scheme] -> Infer a -> Infer a
 withLocals = local . first . flip appendLocal
 
 pushLevel :: Infer a -> Infer a
@@ -194,7 +194,7 @@ instantiate (Forall xs t) = do
 inferExpr :: N.Expr -> Infer (Subst, Type)
 inferExpr (N.ParamBound i) = (,) nullSubst <$> findParam i
 inferExpr (N.GlobalBound name) = (,) nullSubst <$> (instantiate =<< findGlobal name)
-inferExpr (N.LetBound i) = (,) nullSubst <$> findLocal i
+inferExpr (N.LetBound i) = (,) nullSubst <$> (instantiate =<< findLocal i)
 inferExpr (N.Integer _) = return (nullSubst, Integer)
 inferExpr (N.Lambda body) = do
     tv <- freshFree
@@ -208,9 +208,10 @@ inferExpr (N.Apply a b) = do
     return (s3 `compose` s2 `compose` s1, apply s3 tv)
 inferExpr (N.LetIn defs body) = do
     (s1, tys) <- first (foldr compose nullSubst) <$> pushLevel (mapAndUnzipM inferExpr defs)
+    schemes <- mapM generalize tys
     (s2, ty) <-
       withSubst s1 $
-        withLocals tys $
+        withLocals schemes $
           inferExpr body
     return (s1 `compose` s2, ty)
 inferExpr (N.BinaryOp op a b) =
