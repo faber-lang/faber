@@ -24,6 +24,8 @@ data Type
   | Tuple [Type]
   deriving (Show, Eq)
 
+data Scheme = Forall [TVar] Type
+
 data TypeEnv =
   TypeEnv { params  :: [Type]
           , locals  :: [[Type]]
@@ -94,12 +96,17 @@ runInfer m = case evalState (runReaderT (runExceptT m) (initEnv, 0)) initUnique 
   Left err -> Left err
   Right a  -> Right a
 
-fresh :: Infer Type
-fresh = do
+fresh :: Level -> State Unique Type
+fresh level = do
   (Unique i) <- get
-  (_, level) <- ask
   modify incrUnique
-  return $ Variable i (Free level)
+  return $ Variable i level
+
+freshFree :: Infer Type
+freshFree = (lift . lift . fresh) =<< asks (Free . snd)
+
+freshBound :: State Unique Type
+freshBound = fresh Bound
 
 findParam :: Int -> Infer Type
 findParam i = do
@@ -150,22 +157,46 @@ bind i t | occursCheck i t = throwError $ InfiniteType i t
 occursCheck :: Substitutable a => Int -> a -> Bool
 occursCheck i t = i `Set.member` ftv t
 
+generalizer :: Type -> ReaderT Int (State Unique) Subst
+generalizer (Function a b) = do
+  s1 <- generalizer a
+  s2 <- generalizer (apply s1 b)
+  return $ s1 `compose` s2
+generalizer Integer = return nullSubst
+generalizer (Tuple xs) = foldr compose nullSubst <$> mapM generalizer xs
+generalizer (Variable i (Free level)) = do
+  cLevel <- ask
+  if cLevel < level
+  then lift $ Map.singleton i <$> freshBound
+  else return nullSubst
+generalizer (Variable _ Bound) = return nullSubst
+
+generalize :: Type -> Infer Scheme
+generalize t = do
+  s <- (lift . lift . runReaderT (generalizer t)) =<< asks snd
+  return $ Forall (extractAll s) (apply s t)
+  where
+    extractAll = map extract . Map.elems
+    extract (Variable i Bound) = i
+    extract _                  = error "unreachable"
+
 inferExpr :: N.Expr -> Infer (Subst, Type)
 inferExpr (N.ParamBound i) = (,) nullSubst <$> findParam i
 inferExpr (N.GlobalBound name) = (,) nullSubst <$> findGlobal name
 inferExpr (N.LetBound i) = (,) nullSubst <$> findLocal i
 inferExpr (N.Integer _) = return (nullSubst, Integer)
 inferExpr (N.Lambda body) = do
-    tv <- fresh
+    tv <- freshFree
     (s, ret) <- withParam tv $ inferExpr body
     return (s, Function (apply s tv) ret)
 inferExpr (N.Apply a b) = do
-    tv <- fresh
+    tv <- freshFree
     (s1, a_ty) <- inferExpr a
     (s2, b_ty) <- withSubst s1 $ inferExpr b
     s3 <- unify (apply s2 a_ty) (Function b_ty tv)
     return (s3 `compose` s2 `compose` s1, apply s3 tv)
 inferExpr (N.LetIn defs body) = do
+    vars <- replicateM (length defs) freshFree
     (s1, tys) <- first (foldr compose nullSubst) <$> pushLevel (mapAndUnzipM inferExpr defs)
     (s2, ty) <-
       withSubst s1 $
