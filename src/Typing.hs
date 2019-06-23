@@ -157,7 +157,7 @@ inferExpr (N.Apply a b) = do
     s3 <- unify (apply s2 a_ty) (Function b_ty tv)
     return (s3 `compose` s2 `compose` s1, apply s3 tv)
 inferExpr (N.LetIn defs body) = do
-    (s1, tys) <- (first $ foldr compose nullSubst) <$> mapAndUnzipM inferExpr defs
+    (s1, tys) <- first (foldr compose nullSubst) <$> mapAndUnzipM inferExpr defs
     (s2, ty) <-
       withSubst s1 $
         withLocals tys $

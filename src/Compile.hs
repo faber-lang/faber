@@ -24,7 +24,7 @@ data CompileError
 compileToModule :: String -> String -> Either CompileError LLVMAST.Module
 compileToModule filename source = do
   ast <- mapLeft ParseError $ Fab.parseCode filename source
-  ir  <- return $ conv1 ast
+  let ir = conv1 ast
   ()  <- mapLeft TypeError $ Fab.typing ir
   return $ conv2 ir
   where
