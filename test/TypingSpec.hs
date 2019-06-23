@@ -63,4 +63,5 @@ spec = do
         typeExpr (LetIn [Lambda $ var 0] $ Apply (Apply fRef fRef) (Apply fRef (int 1))) `shouldBe` Right T.Integer
 
     it "doesn't generalize lambda params" $ do
+      -- (\f => (f 0, f (\x => x))) (\x => x)
       expectError (Apply (Lambda $ Tuple [Apply (var 0) (int 0), Apply (var 0) (Lambda $ var 0)]) (Lambda $ var 0)) `shouldContain` "UnificationFail"

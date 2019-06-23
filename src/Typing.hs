@@ -3,6 +3,7 @@ module Typing where
 import           Control.Monad.Except
 import           Control.Monad.Reader
 import           Control.Monad.State
+import           Data.Foldable
 import qualified Data.Map             as Map
 import qualified Data.Set             as Set
 import           Data.Tuple.Extra
@@ -191,6 +192,13 @@ instantiate (Forall xs t) = do
   let s = Map.fromList $ zip xs xs'
   return $ apply s t
 
+inferExprs :: [N.Expr] -> Infer (Subst, [Type])
+inferExprs = foldrM f (nullSubst, [])
+  where
+    f x (s1, tys) = do
+      (s2, t) <- withSubst s1 $ inferExpr x
+      return (s1 `compose` s2, t : tys)
+
 inferExpr :: N.Expr -> Infer (Subst, Type)
 inferExpr (N.ParamBound i) = (,) nullSubst <$> findParam i
 inferExpr (N.GlobalBound name) = (,) nullSubst <$> (instantiate =<< findGlobal name)
@@ -207,7 +215,7 @@ inferExpr (N.Apply a b) = do
     s3 <- unify (apply s2 a_ty) (Function b_ty tv)
     return (s3 `compose` s2 `compose` s1, apply s3 tv)
 inferExpr (N.LetIn defs body) = do
-    (s1, tys) <- first (foldr compose nullSubst) <$> pushLevel (mapAndUnzipM inferExpr defs)
+    (s1, tys) <- pushLevel $ inferExprs defs
     schemes <- mapM generalize tys
     (s2, ty) <-
       withSubst s1 $
@@ -228,7 +236,7 @@ inferExpr (N.SingleOp op x) =
       (s1, ty) <- inferExpr x
       s2 <- unify (apply s1 ty) op_type
       return (s2 `compose` s1, op_type)
-inferExpr (N.Tuple xs) = (foldr compose nullSubst *** Tuple) <$> mapAndUnzipM inferExpr xs
+inferExpr (N.Tuple xs) = second Tuple <$> inferExprs xs
 
 inferDefs :: N.Code -> Infer ()
 inferDefs (N.Name (N.NameDef name body):xs) = do
