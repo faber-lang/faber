@@ -199,7 +199,10 @@ codegen m = IR.buildModule "faber-output" $ do
   IR.function "main" [(Ty.i32, "argc"), (Ty.ptr (Ty.ptr Ty.i8), "argv")] Ty.i32 $ \[_, _] -> do
     ret <- genCode $ code m
     int <- IR.ptrtoint ret Ty.i64
-    IR.ret =<< IR.trunc int Ty.i32
+    printf <- IR.externVarArgs "printf" [Ty.ptr Ty.i8] Ty.i32
+    fmt <- IR.globalStringPtr "%d\n" "fmt"
+    _ <- IR.call printf [(fmt, []), (int, [])]
+    IR.ret $ AST.ConstantOperand $ Const.Int 32 0
 
 toLLVM :: AST.Module -> IO Text
 toLLVM m = LLVM.withContext $ \ctx ->
