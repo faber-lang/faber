@@ -40,3 +40,7 @@ spec = do
     it "let-in and where" $ execBS $(embedFile "test/data/let_in.fab") `shouldReturn` "47\n"
     it "church numerals" $ execBS $(embedFile "test/data/church.fab") `shouldReturn` "15\n"
     it "let polymorphism" $ execBS $(embedFile "test/data/let_poly.fab") `shouldReturn` "4\n"
+
+    it "ackermann" $ execBS $(embedFile "test/data/ack.fab") `shouldReturn` "125\n"
+    it "factorial" $ execBS $(embedFile "test/data/factorial.fab") `shouldReturn` "120\n"
+    it "mutual recursion" $ execBS $(embedFile "test/data/multiple_names.fab") `shouldReturn` "1\n"
