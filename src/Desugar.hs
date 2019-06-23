@@ -11,6 +11,7 @@ data Expr
   | BinaryOp Op.BinaryOp Expr Expr
   | SingleOp Op.SingleOp Expr
   | Tuple [Expr]
+  | LetIn [Def] Expr
   deriving (Show, Eq)
 
 data DefBody
@@ -32,9 +33,11 @@ desugarExpr (P.Variable x)      = Variable x
 desugarExpr (P.BinaryOp op a b) = BinaryOp op (desugarExpr a) (desugarExpr b)
 desugarExpr (P.SingleOp op x)   = SingleOp op $ desugarExpr x
 desugarExpr (P.Tuple xs)        = Tuple $ map desugarExpr xs
+desugarExpr (P.LetIn defs x)    = LetIn (map desugarDef defs) $ desugarExpr x
 
 desugarDefBody :: P.DefBody -> DefBody
-desugarDefBody (P.Name ps body) = Name $ desugarLambda ps $ desugarExpr body
+desugarDefBody (P.Name ps body []) = Name $ desugarLambda ps $ desugarExpr body
+desugarDefBody (P.Name ps body defs) = Name $ LetIn (map desugarDef defs) $ desugarLambda ps $ desugarExpr body
 
 desugarDef :: P.Def -> Def
 desugarDef (P.Def name body) = Def name $ desugarDefBody body

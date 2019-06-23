@@ -2,12 +2,14 @@ module Parse where
 
 import           Control.Arrow
 import           Control.Monad.Combinators.Expr
+import           Data.Maybe                     (fromMaybe)
 import           Data.Void
-import qualified Operators                      as Op
 import           Text.Megaparsec                hiding (ParseError)
 import qualified Text.Megaparsec.Char           as C
 import qualified Text.Megaparsec.Char.Lexer     as L
 import           Text.Megaparsec.Error          (errorBundlePretty)
+
+import qualified Operators as Op
 
 -- syntax tree
 type Ident = String
@@ -20,10 +22,11 @@ data Expr
   | Tuple [Expr]
   | BinaryOp Op.BinaryOp Expr Expr
   | SingleOp Op.SingleOp Expr
+  | LetIn [Def] Expr
   deriving (Show, Eq)
 
 data DefBody
-  = Name [Ident] Expr
+  = Name [Ident] Expr [Def]
   deriving (Show, Eq)
 
 data Def = Def String DefBody deriving (Show, Eq)
@@ -52,9 +55,19 @@ integer = lexeme L.decimal
 parens :: Parser a -> Parser a
 parens = between (symbol "(") (symbol ")")
 
+rws :: [String]
+rws = ["let", "in", "where", "name"]
+
+rword :: String -> Parser ()
+rword w = (lexeme . try) (C.string w *> notFollowedBy C.alphaNumChar)
+
 -- the actual parser
 identifier :: Parser Ident
-identifier = lexeme $ (:) <$> C.letterChar <*> many C.alphaNumChar
+identifier = (lexeme . try) (p >>= check)
+  where
+    p = (:) <$> C.letterChar <*> many C.alphaNumChar
+    check x | x `elem` rws = fail $ "attempt to parse " ++ show x ++ "as an identifier"
+            | otherwise    = return x
 
 -- expression parser
 tuple :: Parser Expr
@@ -67,6 +80,13 @@ lambda = do
   symbol "=>"
   Lambda param <$> expr
 
+letIn :: Parser Expr
+letIn = do
+  rword "let"
+  defs <- definitions
+  rword "in"
+  LetIn defs <$> expr
+
 operators :: [[Operator Parser Expr]]
 operators =
   [ [ InfixL (Apply <$ symbol "") ],
@@ -77,6 +97,7 @@ operators =
 
 term :: Parser Expr
 term = try (parens expr)
+  <|> letIn
   <|> tuple
   <|> lambda
   <|> Variable <$> identifier
@@ -92,15 +113,24 @@ nameDef = do
   params <- many identifier
   symbol "="
   body <- expr
-  symbol ";;"
-  return $ Def name $ Name params body
+  defs <- fromMaybe [] <$> optional where_
+  return $ Def name $ Name params body defs
+  where
+    where_ = rword "where" >> definitions
 
 definition :: Parser Def
 definition = nameDef
 
+definitions :: Parser [Def]
+definitions = many (optional hyphen >> definition)
+  where
+    hyphen = symbol "-"
+
 -- wrap them up
 code :: Parser Code
-code = many definition
+code = some (delim >> definition)
+  where
+    delim = rword "name"
 
 parser :: Parser Code
 parser = between space eof code

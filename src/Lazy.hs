@@ -1,13 +1,20 @@
 module Lazy where
 
+import Control.Monad.Reader
+import Data.Bool            (bool)
+import Data.Tuple.Extra     (first, second)
+
 import qualified Nameless  as N
 import qualified Operators as Op
+
+import Utils
 
 data Expr
   = Integer Int
   | Lambda Expr
   | Apply Expr Expr
   | ParamBound Int
+  | LetBound LetIndex
   | GlobalBound String
   | BinaryOp Op.BinaryOp Expr Expr
   | SingleOp Op.SingleOp Expr
@@ -18,28 +25,38 @@ data Expr
   | Deref Expr
   | If Expr Expr Expr
   | LocalLet Expr Expr
-  | LetBound
+  | LocalBound
+  | LetIn [Expr] Expr
   deriving (Show, Eq)
 
 data DefBody
   = Name Expr
+  deriving (Show, Eq)
 
-data Def = Def String DefBody
+data Def = Def String DefBody deriving (Show, Eq)
 
 data Code =
   Code { definitions :: [Def]
        , entrypoint  :: Expr }
+  deriving (Show, Eq)
 
-incrVars :: Int -> N.Expr -> N.Expr
-incrVars n (N.ParamBound i)   | i >= n    = N.ParamBound $ i + 1
-                              | otherwise = N.ParamBound i
-incrVars _ (N.GlobalBound s)         = N.GlobalBound s
-incrVars _ (N.Integer i)             = N.Integer i
-incrVars n (N.Lambda x)              = N.Lambda $ incrVars (succ n) x
-incrVars n (N.Apply a b)             = N.Apply (incrVars n a) (incrVars n b)
-incrVars n (N.BinaryOp op a b)       = N.BinaryOp op (incrVars n a) (incrVars n b)
-incrVars n (N.SingleOp op x)         = N.SingleOp op $ incrVars n x
-incrVars n (N.Tuple xs)              = N.Tuple $ map (incrVars n) xs
+type Lift = Reader (Int, Int)
+
+liftVars :: N.Expr -> Lift N.Expr
+liftVars (N.ParamBound i) = bool (N.ParamBound i) (N.ParamBound $ i + 1) <$> asks shouldLift
+  where
+    shouldLift (n, _) = i >= n
+liftVars (N.LetBound i) = bool (N.LetBound i) (N.LetBound $ mapLambdaIndex succ i) <$> asks (shouldLift i)
+  where
+    shouldLift (LetIndex lam loc _  _) (n, m) = lam > n || (lam == n && loc >= m)
+liftVars (N.GlobalBound s)         = return $ N.GlobalBound s
+liftVars (N.Integer i)             = return $ N.Integer i
+liftVars (N.Lambda x)              = N.Lambda <$> local (first succ) (liftVars x)
+liftVars (N.Apply a b)             = N.Apply <$> liftVars a <*> liftVars b
+liftVars (N.BinaryOp op a b)       = N.BinaryOp op <$> liftVars a <*> liftVars b
+liftVars (N.SingleOp op x)         = N.SingleOp op <$> liftVars x
+liftVars (N.Tuple xs)              = N.Tuple <$> mapM liftVars xs
+liftVars (N.LetIn defs body)       = N.LetIn <$> mapM liftVars defs <*> local (second succ) (liftVars body)
 
 makeEvaledThunk :: Expr -> Expr
 makeEvaledThunk e = Ref $ Tuple [Integer 1, e]
@@ -48,14 +65,14 @@ makeThunk :: N.Expr -> Expr
 makeThunk e = Ref $ Tuple [Integer 0, code]
   where
     code = Lambda $ NthOf 1 $ Assign (ParamBound 0) updated
-    updated = Tuple [Integer 1, lazyExpr $ incrVars 0 e]
+    updated = Tuple [Integer 1, lazyExpr $ runReader (liftVars e) (0, 0)]
 
 evalThunk :: Expr -> Expr
 evalThunk e = LocalLet (Deref e) $ If cond then_ else_
   where
-    cond  = NthOf 0 LetBound
-    then_ = NthOf 1 LetBound
-    else_ = Apply (NthOf 1 LetBound) e
+    cond  = NthOf 0 LocalBound
+    then_ = NthOf 1 LocalBound
+    else_ = Apply (NthOf 1 LocalBound) e
 
 isValue :: N.Expr -> Bool
 isValue N.Integer{}     = True
@@ -63,25 +80,30 @@ isValue N.Tuple{}       = True
 isValue N.Lambda{}      = True
 isValue N.Apply{}       = False
 isValue N.ParamBound{}  = False
+isValue N.LetBound{}    = False
 isValue N.GlobalBound{} = False
 isValue N.BinaryOp{}    = False
 isValue N.SingleOp{}    = False
+isValue N.LetIn{}       = False
 
 lazify :: N.Expr -> Expr
 lazify (N.ParamBound i)  = ParamBound i
 lazify (N.GlobalBound s) = GlobalBound s
+lazify (N.LetBound i)    = LetBound i
 lazify x | isValue x     = makeEvaledThunk $ lazyExpr x
          | otherwise     = makeThunk x
 
 lazyExpr :: N.Expr -> Expr
 lazyExpr (N.Apply a b)       = Apply (lazyExpr a) (lazify b)
 lazyExpr (N.ParamBound i)    = evalThunk (ParamBound i)
+lazyExpr (N.LetBound i)      = evalThunk (LetBound i)
 lazyExpr (N.GlobalBound s)   = evalThunk (GlobalBound s)
 lazyExpr (N.Integer i)       = Integer i
 lazyExpr (N.BinaryOp op a b) = BinaryOp op (lazyExpr a) (lazyExpr b)
 lazyExpr (N.SingleOp op x)   = SingleOp op (lazyExpr x)
 lazyExpr (N.Tuple xs)        = Tuple $ map lazyExpr xs
 lazyExpr (N.Lambda body)     = Lambda $ lazyExpr body
+lazyExpr (N.LetIn defs body) = LetIn (map lazify defs) $ lazyExpr body
 
 lazyDefBody :: N.DefBody -> DefBody
 lazyDefBody (N.Name x) = Name $ lazify x

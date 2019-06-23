@@ -28,6 +28,6 @@ spec = do
             ) `shouldBe` ([Function 2 $ Parameter 1] ,
               LocalLet (Tuple [FunctionRef 0, Tuple []])
               (
-                Call (NthOf 0 LetBound) [NthOf 1 LetBound, Integer 1]
+                Call (NthOf 0 LocalBound) [NthOf 1 LocalBound, Integer 1]
               )
             )

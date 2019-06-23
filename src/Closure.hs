@@ -5,6 +5,7 @@ import Data.List
 
 import qualified Lazy      as L
 import qualified Operators as Op
+import           Utils
 
 data Expr
   = Integer Int
@@ -12,6 +13,7 @@ data Expr
   | GlobalName String
   | Parameter
   | Env
+  | LetBound LetIndex
   | Apply Expr Expr
   | BinaryOp Op.BinaryOp Expr Expr
   | SingleOp Op.SingleOp Expr
@@ -22,7 +24,8 @@ data Expr
   | Deref Expr
   | If Expr Expr Expr
   | LocalLet Expr Expr
-  | LetBound
+  | LocalBound
+  | LetIn [Expr] Expr
   deriving (Show, Eq)
 
 data DefBody
@@ -51,6 +54,8 @@ convertBody :: L.Expr -> Convert Expr
 convertBody (L.ParamBound 0) = return Parameter
 convertBody (L.ParamBound i) = flip NthOf Env <$> update (L.ParamBound $ i - 1)
 convertBody (L.GlobalBound s) = flip NthOf Env <$> update (L.GlobalBound s)
+convertBody (L.LetBound i) | lambdaIndex i == 0 = return $ LetBound i
+                           | otherwise          = flip NthOf Env <$> update (L.LetBound $ mapLambdaIndex pred i)
 convertBody (L.Lambda e) = do
   t <- convertBody $ L.Tuple fvs
   return $ Tuple [Function body, t]
@@ -67,11 +72,14 @@ convertBody (L.Assign a b) = Assign <$> convertBody a <*> convertBody b
 convertBody (L.Deref x) = Deref <$> convertBody x
 convertBody (L.If c t e) = If <$> convertBody c <*> convertBody t <*> convertBody e
 convertBody (L.LocalLet a b) = LocalLet <$> convertBody a <*> convertBody b
-convertBody L.LetBound = return LetBound
+convertBody L.LocalBound = return LocalBound
+convertBody (L.LetIn defs body) = LetIn <$> mapM convertBody defs <*> convertBody body
 
 -- convert a top-level expression
 convertExpr :: L.Expr -> Expr
 convertExpr (L.ParamBound i) = error $ "Invalid occurrence of parameter " ++ show i
+convertExpr (L.LetBound i) | lambdaIndex i == 0 = LetBound i
+                           | otherwise          = error $ "Invalid occurrence of variable " ++ show i
 convertExpr (L.GlobalBound s) = GlobalName s
 convertExpr (L.Lambda e) = Tuple [Function body, t]
   where
@@ -88,7 +96,8 @@ convertExpr (L.Assign a b) = Assign (convertExpr a) (convertExpr b)
 convertExpr (L.Deref x) = Deref $ convertExpr x
 convertExpr (L.If c t e) = If (convertExpr c) (convertExpr t) (convertExpr e)
 convertExpr (L.LocalLet a b) = LocalLet (convertExpr a) (convertExpr b)
-convertExpr L.LetBound = LetBound
+convertExpr L.LocalBound = LocalBound
+convertExpr (L.LetIn defs body) = LetIn (map convertExpr defs) (convertExpr body)
 
 convertDef :: L.Def -> Def
 convertDef (L.Def name (L.Name body)) = Def name $ Name $ convertExpr body

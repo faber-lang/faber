@@ -3,13 +3,14 @@ module Main where
 import Compile
 import Parse
 
-import Data.Text.IO       as TIO
-import System.Environment
+import qualified Data.Text.IO       as TIO
+import           System.Environment
 
 main :: IO ()
 main = do
-  args <- getArgs
-  case parseCode "input" (args !! 0) of
+  filename <- (!! 0) <$> getArgs
+  content <- readFile filename
+  case parseCode filename content of
     Right e -> do
       ir <- compile e
       TIO.putStrLn ir

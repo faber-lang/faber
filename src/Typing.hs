@@ -1,12 +1,14 @@
 module Typing where
 
-import           Control.Arrow
 import           Control.Monad.Except
 import           Control.Monad.Reader
 import           Control.Monad.State
 import qualified Data.Map             as Map
 import qualified Data.Set             as Set
-import qualified Nameless             as N
+import           Data.Tuple.Extra
+
+import qualified Nameless as N
+import           Utils
 
 type TVar = Int
 
@@ -19,18 +21,23 @@ data Type
 
 data TypeEnv =
   TypeEnv { params  :: [Type]
+          , locals  :: [[Type]]
           , globals :: Map.Map String Type }
 
 initEnv :: TypeEnv
-initEnv = TypeEnv [] Map.empty
-lookupParam :: TypeEnv -> TVar -> Type
-lookupParam (TypeEnv env _)  = (env !!)
+initEnv = TypeEnv [] [] Map.empty
+lookupParam :: TypeEnv -> Int -> Type
+lookupParam (TypeEnv env _ _)  = (env !!)
+lookupLocal :: TypeEnv -> Int -> Int -> Type
+lookupLocal (TypeEnv _ env _)  = (!!) . (env !!)
 lookupGlobal :: TypeEnv -> String -> Maybe Type
-lookupGlobal (TypeEnv _ env) = flip Map.lookup env
+lookupGlobal (TypeEnv _ _ env) = flip Map.lookup env
 appendParam :: TypeEnv -> Type -> TypeEnv
-appendParam (TypeEnv ps gs) t = TypeEnv (t:ps) gs
+appendParam (TypeEnv ps ls gs) t = TypeEnv (t:ps) ls gs
+appendLocal :: TypeEnv -> [Type] -> TypeEnv
+appendLocal (TypeEnv ps ls gs) t = TypeEnv ps (t:ls) gs
 appendGlobal :: TypeEnv -> String -> Type -> TypeEnv
-appendGlobal (TypeEnv ps gs) k v = TypeEnv ps $ Map.insert k v gs
+appendGlobal (TypeEnv ps ls gs) k v = TypeEnv ps ls $ Map.insert k v gs
 
 type Subst = Map.Map TVar Type
 
@@ -57,8 +64,8 @@ instance Substitutable a => Substitutable [a] where
   ftv = foldr (Set.union . ftv) Set.empty
 
 instance Substitutable TypeEnv where
-  apply s (TypeEnv ps gs) = TypeEnv (apply s ps) (Map.map (apply s) gs)
-  ftv (TypeEnv ps gs) = ftv ps `Set.union` ftv (Map.elems gs)
+  apply s (TypeEnv ps ls gs) = TypeEnv (apply s ps) (apply s ls) (Map.map (apply s) gs)
+  ftv (TypeEnv ps ls gs) = ftv ps `Set.union` ftv ls `Set.union` ftv (Map.elems gs)
 
 compose :: Subst -> Subst -> Subst
 s1 `compose` s2 = Map.map (apply s1) s2 `Map.union` s1
@@ -93,6 +100,11 @@ findParam i = do
   env <- ask
   return $ lookupParam env i
 
+findLocal :: LetIndex -> Infer Type
+findLocal (LetIndex _ _ local inner) = do
+  env <- ask
+  return $ lookupLocal env local inner
+
 findGlobal :: String -> Infer Type
 findGlobal s = do
   env <- ask
@@ -101,14 +113,14 @@ findGlobal s = do
 withParam :: Type -> Infer a -> Infer a
 withParam = local . flip appendParam
 
-flip3 :: (a -> b -> c -> d) -> b -> c -> a -> d
-flip3 f b c a = f a b c
-
 withGlobal :: String -> Type -> Infer a -> Infer a
 withGlobal name = local . flip3 appendGlobal name
 
 withSubst :: Subst -> Infer a -> Infer a
 withSubst = local . apply
+
+withLocals :: [Type] -> Infer a -> Infer a
+withLocals = local . flip appendLocal
 
 unify :: Type -> Type -> Infer Subst
 unify (Function a1 b1) (Function a2 b2) = do
@@ -132,6 +144,7 @@ occursCheck i t = i `Set.member` ftv t
 inferExpr :: N.Expr -> Infer (Subst, Type)
 inferExpr (N.ParamBound i) = (,) nullSubst <$> findParam i
 inferExpr (N.GlobalBound name) = (,) nullSubst <$> findGlobal name
+inferExpr (N.LetBound i) = (,) nullSubst <$> findLocal i
 inferExpr (N.Integer _) = return (nullSubst, Integer)
 inferExpr (N.Lambda body) = do
     tv <- fresh
@@ -143,6 +156,13 @@ inferExpr (N.Apply a b) = do
     (s2, b_ty) <- withSubst s1 $ inferExpr b
     s3 <- unify (apply s2 a_ty) (Function b_ty tv)
     return (s3 `compose` s2 `compose` s1, apply s3 tv)
+inferExpr (N.LetIn defs body) = do
+    (s1, tys) <- (first $ foldr compose nullSubst) <$> mapAndUnzipM inferExpr defs
+    (s2, ty) <-
+      withSubst s1 $
+        withLocals tys $
+          inferExpr body
+    return (s1 `compose` s2, ty)
 inferExpr (N.BinaryOp op a b) =
     let op_type = Integer in
     do
