@@ -20,11 +20,11 @@ data Expr
   | LetIn [Expr] Expr
   deriving (Show, Eq)
 
-data DefBody
-  = Name Expr
+data NameDef
+  = NameDef String Expr
   deriving (Show, Eq)
 
-data Def = Def String DefBody deriving (Show, Eq)
+newtype Def = Name NameDef deriving (Show, Eq)
 
 type Code = [Def]
 
@@ -81,8 +81,8 @@ namelessExpr (D.Apply fn arg) = Apply <$> namelessExpr fn <*> namelessExpr arg
 namelessExpr (D.Lambda p body) = Lambda <$> withBinding (Param p) (namelessExpr body)
 namelessExpr (D.LetIn defs body) = LetIn <$> defs' <*> withBinding (Let names) (namelessExpr body)
   where
-    extractBody (D.Def _ (D.Name b)) = b
-    extractName (D.Def name (D.Name _)) = name
+    extractBody (D.NameDef _ b) = b
+    extractName (D.NameDef name _) = name
     defs' = mapM (namelessExpr . extractBody) defs
     names = map extractName defs
 namelessExpr (D.Variable name) = findName name
@@ -91,12 +91,9 @@ namelessExpr (D.BinaryOp op a b) = BinaryOp op <$> namelessExpr a <*> namelessEx
 namelessExpr (D.SingleOp op x) = SingleOp op <$> namelessExpr x
 namelessExpr (D.Tuple xs) = Tuple <$> mapM namelessExpr xs
 
-namelessDefBody :: D.DefBody -> Nameless DefBody
-namelessDefBody (D.Name body) = Name <$> namelessExpr body
-
 namelessDefs :: [D.Def] -> Nameless [Def]
-namelessDefs (D.Def name body:xs) = do
-  def <- Def name <$> namelessDefBody body
+namelessDefs (D.Name (D.NameDef name body):xs) = do
+  def <- Name . NameDef name <$> namelessExpr body
   xs' <- withBinding (Global name) (namelessDefs xs)
   return $ def : xs'
 namelessDefs [] = return []

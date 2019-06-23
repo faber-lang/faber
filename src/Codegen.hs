@@ -180,7 +180,7 @@ genTopExpr :: (IR.MonadIRBuilder m, IR.MonadModuleBuilder m, MonadFix m, MonadSt
 genTopExpr e = runReaderT (genExpr e) initEnv
 
 genDef :: (IR.MonadIRBuilder m, IR.MonadModuleBuilder m, MonadFix m, MonadState NameMap m) => Def -> m ()
-genDef (Def name (Name body)) = do
+genDef (Name (NameDef name body)) = do
   e <- genTopExpr body
   modify $ Map.insert name e
 

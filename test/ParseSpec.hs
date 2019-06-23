@@ -11,7 +11,7 @@ parse s = case parseCode "" code of
   Right t               -> destruct t
   where
     code = "name main = " ++ s
-    destruct [Def _ (Name [] body [])] = body
+    destruct [Name (NameDef _ [] body [])] = body
 
 add :: Expr -> Expr -> Expr
 add = BinaryOp Add
@@ -96,19 +96,19 @@ spec = do
       parse "()" `shouldBe` Tuple []
 
     it "parse let-in" $ do
-      parse "let a = 1 in a" `shouldBe` LetIn [Def "a" (Name [] (int 1) [])] (var "a")
-      parse "let - a = 1  - b = 2 in a" `shouldBe` LetIn [Def "a" (Name [] (int 1) []), Def "b" (Name [] (int 2) [])] (var "a")
+      parse "let a = 1 in a" `shouldBe` LetIn [NameDef "a" [] (int 1) []] (var "a")
+      parse "let - a = 1  - b = 2 in a" `shouldBe` LetIn [NameDef "a" [] (int 1) [], NameDef "b" [] (int 2) []] (var "a")
 
     it "parse nested let-in" $ do
-      parse "let a = 1 in let b = 1 in a + b" `shouldBe` LetIn [Def "a" (Name [] (int 1) [])] (LetIn [Def "b" (Name [] (int 1) [])] (var "a" `add` var "b"))
+      parse "let a = 1 in let b = 1 in a + b" `shouldBe` LetIn [NameDef "a" [] (int 1) []] (LetIn [NameDef "b" [] (int 1) []] (var "a" `add` var "b"))
 
     it "parse let-in with where clause" $ do
-      parse "let a = b where b = 1 in a" `shouldBe` LetIn [Def "a" (Name [] (var "b") [Def "b" (Name [] (int 1) [])])] (var "a")
+      parse "let a = b where b = 1 in a" `shouldBe` LetIn [NameDef "a" [] (var "b") [NameDef "b" [] (int 1) []]] (var "a")
 
   describe "definition" $ do
     it "parse simple name definitions" $ do
-      parseCode "" "name def x y = x + y\nname main = 1" `shouldBe` Right [Def "def" (Name ["x", "y"] (add (var "x") (var "y")) []), Def "main" (Name [] (int 1) [])]
+      parseCode "" "name def x y = x + y\nname main = 1" `shouldBe` Right [Name (NameDef "def" ["x", "y"] (add (var "x") (var "y")) []), Name (NameDef "main" [] (int 1) [])]
 
     it "parse name definitions with where" $ do
-      parseCode "" "name def x = y where y = x" `shouldBe` Right [Def "def" (Name ["x"] (var "y") [Def "y" (Name [] (var "x") [])])]
-      parseCode "" "name def x = y where - y = x  - z = x" `shouldBe` Right [Def "def" (Name ["x"] (var "y") [Def "y" (Name [] (var "x") []), Def "z" (Name [] (var "x") [])])]
+      parseCode "" "name def x = y where y = x" `shouldBe` Right [Name (NameDef "def" ["x"] (var "y") [NameDef "y" [] (var "x") []])]
+      parseCode "" "name def x = y where - y = x  - z = x" `shouldBe` Right [Name (NameDef "def" ["x"] (var "y") [NameDef "y" [] (var "x") [], NameDef "z" [] (var "x") []])]

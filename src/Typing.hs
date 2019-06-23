@@ -180,7 +180,7 @@ inferExpr (N.SingleOp op x) =
 inferExpr (N.Tuple xs) = (foldr compose nullSubst *** Tuple) <$> mapAndUnzipM inferExpr xs
 
 inferDefs :: N.Code -> Infer ()
-inferDefs (N.Def name (N.Name body):xs) = do
+inferDefs (N.Name (N.NameDef name body):xs) = do
   (s, t) <- inferExpr body
   withGlobal name t $ withSubst s $ inferDefs xs
 inferDefs [] = return ()
