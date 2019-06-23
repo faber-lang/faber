@@ -59,3 +59,4 @@ tests:
     - hspec-discover
     - temporary
     - typed-process
+    - file-embed
