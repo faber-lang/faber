@@ -30,6 +30,8 @@ dependencies:
 - text
 - extra
 - bytestring
+- temporary
+- typed-process
 
 library:
   source-dirs: src
