@@ -1,11 +1,12 @@
 module TypingSpec (spec) where
 
+import Control.Arrow (right)
 import Test.Hspec
 
-import           Control.Arrow (right)
 import           Nameless
 import           Operators
-import qualified Typing        as T
+import qualified Typing    as T
+import           Utils
 
 -- helpers
 typeExpr :: Expr -> Either T.TypeError T.Type
@@ -54,3 +55,13 @@ spec = do
 
     it "type terms with complex unification" $ do
       typeExpr (Apply (Apply (Apply (Lambda $ Lambda $ Apply (var 0) (var 1)) (int 10)) (Lambda $ Lambda $ var 0 `add` var 1)) (int 1)) `shouldBe` Right T.Integer
+
+  describe "polymorphism" $ do
+    it "type poymorphic functions" $ do
+      -- let f x = x in f f (f 1)
+      let fRef = LetBound $ LetIndex 0 0 0 0 in
+        typeExpr (LetIn [Lambda $ var 0] $ Apply (Apply fRef fRef) (Apply fRef (int 1))) `shouldBe` Right T.Integer
+
+    it "doesn't generalize lambda params" $ do
+      -- (\f => (f 0, f (\x => x))) (\x => x)
+      expectError (Apply (Lambda $ Tuple [Apply (var 0) (int 0), Apply (var 0) (Lambda $ var 0)]) (Lambda $ var 0)) `shouldContain` "UnificationFail"
