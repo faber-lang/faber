@@ -30,8 +30,6 @@ dependencies:
 - text
 - extra
 - bytestring
-- temporary
-- typed-process
 
 library:
   source-dirs: src
@@ -59,3 +57,5 @@ tests:
     - faber
     - hspec
     - hspec-discover
+    - temporary
+    - typed-process
