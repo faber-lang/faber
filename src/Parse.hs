@@ -44,8 +44,8 @@ space = L.space skip line block
   where
     line = L.skipLineComment "//"
     block = L.skipBlockComment "/*" "*/"
-    skip = void $ some (notFollowedBy (C.newline >> optional sc >> C.char '-') >> (void C.newline <|> sc))
-    sc = void $ some (C.char ' ' <|> C.char '\t')
+    skip = void $ some (notFollowedBy (C.newline >> many sc >> C.char '-') >> (void C.newline <|> void (some sc)))
+    sc = C.char ' ' <|> C.char '\t'
 
 lexeme :: Parser a -> Parser a
 lexeme = L.lexeme space
