@@ -97,7 +97,7 @@ spec = do
 
     it "parse let-in" $ do
       parse "let a = 1 in a" `shouldBe` LetIn [NameDef "a" [] (int 1) []] (var "a")
-      parse "let - a = 1  - b = 2 in a" `shouldBe` LetIn [NameDef "a" [] (int 1) [], NameDef "b" [] (int 2) []] (var "a")
+      parse "let\n - a = 1\n - b = 2 in a" `shouldBe` LetIn [NameDef "a" [] (int 1) [], NameDef "b" [] (int 2) []] (var "a")
 
     it "parse nested let-in" $ do
       parse "let a = 1 in let b = 1 in a + b" `shouldBe` LetIn [NameDef "a" [] (int 1) []] (LetIn [NameDef "b" [] (int 1) []] (var "a" `add` var "b"))
@@ -115,4 +115,4 @@ spec = do
 
     it "parse name definitions with where" $ do
       parseCode "" "name def x = y where y = x" `shouldBe` Right [Name (NameDef "def" ["x"] (var "y") [NameDef "y" [] (var "x") []])]
-      parseCode "" "name def x = y where - y = x  - z = x" `shouldBe` Right [Name (NameDef "def" ["x"] (var "y") [NameDef "y" [] (var "x") [], NameDef "z" [] (var "x") []])]
+      parseCode "" "name def x = y where\n - y = x\n  - z = x" `shouldBe` Right [Name (NameDef "def" ["x"] (var "y") [NameDef "y" [] (var "x") [], NameDef "z" [] (var "x") []])]

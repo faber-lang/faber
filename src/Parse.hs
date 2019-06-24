@@ -2,6 +2,7 @@ module Parse where
 
 import           Control.Arrow
 import           Control.Monad.Combinators.Expr
+import           Data.Functor                   (void)
 import           Data.Maybe                     (fromMaybe)
 import           Data.Void
 import           Text.Megaparsec                hiding (ParseError)
@@ -39,10 +40,12 @@ type Parser = Parsec Void String
 
 -- lexer utils
 space :: Parser ()
-space = L.space C.space1 line block
+space = L.space skip line block
   where
     line = L.skipLineComment "//"
     block = L.skipBlockComment "/*" "*/"
+    skip = void $ some (notFollowedBy (C.newline >> optional sc >> C.char '-') >> (void C.newline <|> sc))
+    sc = void $ some (C.char ' ' <|> C.char '\t')
 
 lexeme :: Parser a -> Parser a
 lexeme = L.lexeme space
@@ -134,7 +137,7 @@ nameDef = do
 nameDefs :: Parser [NameDef]
 nameDefs = many (optional hyphen >> nameDef)
   where
-    hyphen = symbol "-"
+    hyphen = lexeme C.newline >> symbol "-"
 
 definition :: Parser Def
 definition = Name <$> (rword "name" >> nameDef)
