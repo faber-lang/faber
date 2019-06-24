@@ -1,0 +1,6 @@
+name main =
+  if a * 2 == 20
+  then 43
+  else 0
+  where
+    a = 10

@@ -2,6 +2,7 @@ module Parse where
 
 import           Control.Arrow
 import           Control.Monad.Combinators.Expr
+import           Data.Functor                   (void)
 import           Data.Maybe                     (fromMaybe)
 import           Data.Void
 import           Text.Megaparsec                hiding (ParseError)
@@ -39,13 +40,18 @@ type Parser = Parsec Void String
 
 -- lexer utils
 space :: Parser ()
-space = L.space C.space1 line block
+space = L.space skip line block
   where
     line = L.skipLineComment "//"
     block = L.skipBlockComment "/*" "*/"
+    skip = notFollowedBy (lexeme_ C.newline >> C.char '-') >> (lexeme_ C.newline <|> sc)
+    sc = void $ some (C.char ' ' <|> C.char '\t')
 
 lexeme :: Parser a -> Parser a
 lexeme = L.lexeme space
+
+lexeme_ :: Parser a -> Parser ()
+lexeme_ = void . lexeme
 
 symbol :: String -> Parser String
 symbol = L.symbol space
@@ -103,7 +109,9 @@ operators =
     [ Prefix (SingleOp Op.Positive <$ symbol "+")
     , Prefix (SingleOp Op.Negative <$ symbol "-") ],
     [ InfixL (BinaryOp Op.Mul <$ symbol "*") ],
-    [ InfixL (BinaryOp Op.Add <$ symbol "+") ] ]
+    [ InfixL (BinaryOp Op.Add <$ symbol "+")
+    , InfixL (BinaryOp Op.Sub <$ symbol "-") ],
+    [ InfixL (BinaryOp Op.Eq <$ symbol "==") ] ]
 
 term :: Parser Expr
 term = try (parens expr)
@@ -132,7 +140,7 @@ nameDef = do
 nameDefs :: Parser [NameDef]
 nameDefs = many (optional hyphen >> nameDef)
   where
-    hyphen = symbol "-"
+    hyphen = lexeme C.newline >> symbol "-"
 
 definition :: Parser Def
 definition = Name <$> (rword "name" >> nameDef)
