@@ -161,16 +161,19 @@ genExpr (Deref e) = do
 
 genExpr (If c t e) = mdo
   c' <- flip IR.ptrtoint Ty.i64 =<< genExpr c
+  res <- IR.alloca genericPtr Nothing 4
   cond <- IR.icmp P.EQ c' $ constInt 0
   IR.condBr cond ifElse ifThen
   ifThen <- IR.block
   t' <- genExpr t
+  IR.store res 0 t'
   IR.br ifExit
   ifElse <- IR.block
   e' <- genExpr e
+  IR.store res 0 e'
   IR.br ifExit
   ifExit <- IR.block
-  IR.phi [(t', ifThen), (e', ifElse)]
+  IR.load res 0
 
 genFunction :: (IR.MonadModuleBuilder m, MonadFix m) => String -> Function -> m AST.Operand
 genFunction name (Function n expr) =
