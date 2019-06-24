@@ -125,6 +125,7 @@ genExpr (BinaryOp op l r) = join $ apply_op <$> genExpr l <*> genExpr r
       case op of
         Op.Add -> IR.add
         Op.Mul -> IR.mul
+        Op.Sub -> IR.sub
 
 genExpr (SingleOp op e) = apply_op =<< genExpr e
   where
