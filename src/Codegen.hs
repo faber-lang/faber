@@ -125,6 +125,10 @@ genExpr (BinaryOp op l r) = join $ apply_op <$> genExpr l <*> genExpr r
       case op of
         Op.Add -> IR.add
         Op.Mul -> IR.mul
+        Op.Sub -> IR.sub
+        Op.Eq -> \a b -> do
+          x <- IR.icmp P.EQ a b
+          IR.zext x Ty.i64
 
 genExpr (SingleOp op e) = apply_op =<< genExpr e
   where
@@ -157,16 +161,19 @@ genExpr (Deref e) = do
 
 genExpr (If c t e) = mdo
   c' <- flip IR.ptrtoint Ty.i64 =<< genExpr c
+  res <- IR.alloca genericPtr Nothing 4
   cond <- IR.icmp P.EQ c' $ constInt 0
   IR.condBr cond ifElse ifThen
   ifThen <- IR.block
   t' <- genExpr t
+  IR.store res 0 t'
   IR.br ifExit
   ifElse <- IR.block
   e' <- genExpr e
+  IR.store res 0 e'
   IR.br ifExit
   ifExit <- IR.block
-  IR.phi [(t', ifThen), (e', ifElse)]
+  IR.load res 0
 
 genFunction :: (IR.MonadModuleBuilder m, MonadFix m) => String -> Function -> m AST.Operand
 genFunction name (Function n expr) =
