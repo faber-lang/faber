@@ -103,7 +103,9 @@ operators =
     [ Prefix (SingleOp Op.Positive <$ symbol "+")
     , Prefix (SingleOp Op.Negative <$ symbol "-") ],
     [ InfixL (BinaryOp Op.Mul <$ symbol "*") ],
-    [ InfixL (BinaryOp Op.Add <$ symbol "+") ] ]
+    [ InfixL (BinaryOp Op.Add <$ symbol "+")
+    , InfixL (BinaryOp Op.Sub <$ symbol "-") ],
+    [ InfixL (BinaryOp Op.Eq <$ symbol "==") ] ]
 
 term :: Parser Expr
 term = try (parens expr)
