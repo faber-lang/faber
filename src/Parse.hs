@@ -53,8 +53,8 @@ lexeme = L.lexeme space
 lexeme_ :: Parser a -> Parser ()
 lexeme_ = void . lexeme
 
-symbol :: String -> Parser String
-symbol = L.symbol space
+symbol :: String -> Parser ()
+symbol = void . L.symbol space
 
 integer :: Parser Int
 integer = lexeme L.decimal
