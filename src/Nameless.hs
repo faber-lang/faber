@@ -77,15 +77,18 @@ findName s = do
   env <- ask
   return $ runReader (findInEnv env s) initState
 
-namelessExpr :: D.Expr -> Nameless Expr
-namelessExpr (D.Apply fn arg) = Apply <$> namelessExpr fn <*> namelessExpr arg
-namelessExpr (D.Lambda p body) = Lambda <$> withBinding (Param p) (namelessExpr body)
-namelessExpr (D.LetIn defs body) = LetIn <$> defs' <*> withBinding (Let names) (namelessExpr body)
+splitNameDefs :: [D.NameDef] -> ([String], [D.Expr])
+splitNameDefs defs = (map extractName defs, map extractBody defs)
   where
     extractBody (D.NameDef _ b) = b
     extractName (D.NameDef name _) = name
-    defs' = mapM (namelessExpr . extractBody) defs
-    names = map extractName defs
+
+namelessExpr :: D.Expr -> Nameless Expr
+namelessExpr (D.Apply fn arg) = Apply <$> namelessExpr fn <*> namelessExpr arg
+namelessExpr (D.Lambda p body) = Lambda <$> withBinding (Param p) (namelessExpr body)
+namelessExpr (D.LetIn defs body) = withBinding (Let names) $ LetIn <$> mapM namelessExpr defs' <*> namelessExpr body
+  where
+    (names, defs') = splitNameDefs defs
 namelessExpr (D.Variable name) = findName name
 namelessExpr (D.Integer i) = return $ Integer i
 namelessExpr (D.BinaryOp op a b) = BinaryOp op <$> namelessExpr a <*> namelessExpr b
