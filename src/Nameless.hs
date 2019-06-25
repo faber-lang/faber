@@ -97,11 +97,13 @@ namelessExpr (D.Tuple xs) = Tuple <$> mapM namelessExpr xs
 namelessExpr (D.If c t e) = If <$> namelessExpr c <*> namelessExpr t <*> namelessExpr e
 
 namelessDefs :: [D.Def] -> Nameless [Def]
-namelessDefs (D.Name (D.NameDef name body):xs) = do
-  def <- Name . NameDef name <$> namelessExpr body
-  xs' <- withBinding (Global name) (namelessDefs xs)
-  return $ def : xs'
-namelessDefs [] = return []
+namelessDefs defs = foldr folder makeDefs names
+  where
+    extract (D.Name d) = d
+    (names, defs') = splitNameDefs $ map extract defs
+    namelessDef' name body = Name . NameDef name <$> namelessExpr body
+    makeDefs = zipWithM namelessDef' names defs'
+    folder x = withBinding (Global x)
 
 namelessCode :: D.Code -> Nameless Code
 namelessCode = namelessDefs
