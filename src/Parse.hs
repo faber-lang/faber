@@ -51,7 +51,7 @@ type Parser = Parsec Void String
 
 -- lexer utils
 headRws :: [Parser ()]
-headRws = [char_ '-', string_ "name", string_ "type", string_ "::"]
+headRws = [char_ '-', string_ "name"]
   where
     char_   = void . C.char
     string_ = void . C.string
@@ -95,7 +95,7 @@ identifier' rws = (lexeme . try) (p >>= check)
 
 -- expression parser
 exprRws :: [String]
-exprRws = ["let", "in", "where", "name", "if", "then", "else"]
+exprRws = ["let", "in", "where", "if", "then", "else"]
 
 identifier :: Parser Ident
 identifier = identifier' exprRws
