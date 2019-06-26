@@ -226,14 +226,22 @@ inferExpr (N.Apply a b) = do
     (s2, b_ty) <- withSubst s1 $ inferExpr b
     s3 <- unify (apply s2 a_ty) (Function b_ty tv)
     return (s3 `compose` s2 `compose` s1, apply s3 tv)
-inferExpr (N.LetIn _ defs body) = do
+inferExpr (N.LetIn annots defs body) = do
     (s1, tys) <- pushLevel $ inferExprs defs
-    schemes <- mapM generalize tys
-    (s2, ty) <-
-      withSubst s1 $
+    (s2s, schemes) <- unzip <$> zipWithM zipper annots tys
+    let s2 = foldr compose s1 s2s
+    (s3, ty) <-
+      withSubst s2 $
         withLocals schemes $
           inferExpr body
-    return (s1 `compose` s2, ty)
+    return (s2 `compose` s3, ty)
+  where
+    zipper annot ty = do
+      a <- generalize ty
+      maybe (return (nullSubst, a)) (go a) annot
+    go a annot = do
+      scheme <- translateScheme Map.empty annot
+      unifyScheme a scheme
 inferExpr (N.BinaryOp op a b) =
     let op_type = Integer in
     do
