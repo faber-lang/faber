@@ -146,3 +146,7 @@ spec = do
     it "parse name definitions with where" $ do
       parseCode "" "name def x = y where y = x" `shouldBe` Right [Name (NameDef "def" ["x"] (var "y") [NameDef "y" [] (var "x") []])]
       parseCode "" "name def x = y where\n - y = x\n  - z = x" `shouldBe` Right [Name (NameDef "def" ["x"] (var "y") [NameDef "y" [] (var "x") [], NameDef "z" [] (var "x") []])]
+
+    it "parse type annotation syntax" $ do
+      parseCode "" "name a :: Int" `shouldBe` Right [Name $ TypeAnnot "a" $ Forall [] $ Ident "Int"]
+      parseCode "" "name a = f where\n- f :: Int\n- f = 1" `shouldBe` Right [Name $ NameDef "a" [] (var "f") [TypeAnnot "f" (Forall [] $ Ident "Int"), NameDef "f" [] (int 1) []]]
