@@ -50,7 +50,7 @@ space = L.space skip line block
   where
     line = L.skipLineComment "//"
     block = L.skipBlockComment "/*" "*/"
-    skip = notFollowedBy (lexeme_ C.newline >> C.char '-') >> (lexeme_ C.newline <|> sc)
+    skip = notFollowedBy (lexeme_ C.newline >> choice head_rws) >> (lexeme_ C.newline <|> sc)
     sc = void $ some (C.char ' ' <|> C.char '\t')
 
 lexeme :: Parser a -> Parser a
@@ -61,6 +61,9 @@ lexeme_ = void . lexeme
 
 symbol :: String -> Parser ()
 symbol = void . L.symbol space
+
+newline :: Parser ()
+newline = lexeme_ C.newline
 
 integer :: Parser Int
 integer = lexeme L.decimal
@@ -146,10 +149,12 @@ nameDef = do
 nameDefs :: Parser [NameDef]
 nameDefs = many (optional hyphen >> nameDef)
   where
-    hyphen = lexeme C.newline >> symbol "-"
+    hyphen = try (newline >> symbol "-")
 
 definition :: Parser Def
-definition = Name <$> (rword "name" >> nameDef)
+definition = Name <$> (delim >> nameDef)
+  where
+    delim = try (optional newline >> symbol "name")
 
 definitions :: Parser [Def]
 definitions = some definition
