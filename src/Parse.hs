@@ -35,9 +35,11 @@ data TypeExpr
 
 data TypeScheme
   = Forall [String] TypeExpr
+  deriving (Show, Eq)
 
 data NameDef
   = NameDef String [Ident] Expr [NameDef]
+  | TypeAnnot String TypeScheme
   deriving (Show, Eq)
 
 newtype Def = Name NameDef deriving (Show, Eq)
@@ -180,8 +182,8 @@ typeScheme = Forall <$> binder <*> typeExpr
       return vars
 
 -- definition parser
-nameDef :: Parser NameDef
-nameDef = do
+nameValueDef :: Parser NameDef
+nameValueDef = do
   name <- identifier
   params <- many identifier
   symbol "="
@@ -190,6 +192,15 @@ nameDef = do
   return $ NameDef name params body defs
   where
     where_ = rword "where" >> nameDefs
+
+nameAnnotDef :: Parser NameDef
+nameAnnotDef = do
+  name <- identifier
+  symbol "::"
+  TypeAnnot name <$> typeScheme
+
+nameDef :: Parser NameDef
+nameDef = try nameAnnotDef <|> nameValueDef
 
 nameDefs :: Parser [NameDef]
 nameDefs = many (optional hyphen >> nameDef)
