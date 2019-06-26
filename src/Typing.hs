@@ -94,6 +94,7 @@ type Infer = ExceptT TypeError (ReaderT (TypeEnv, Int) (State Unique))
 
 data TypeError
   = UnificationFail Type Type
+  | RigidUnificationFail Int Type
   | InfiniteType Int Type
   | UnboundVariable String
   deriving (Show, Eq)
@@ -156,15 +157,18 @@ unify Integer Integer = return nullSubst
 unify (Tuple a) (Tuple b) = foldr compose nullSubst <$> zipWithM unify a b
 unify t1 t2 = throwError $ UnificationFail t1 t2
 
-unifyScheme :: Scheme -> Scheme -> Infer (Subst, Scheme)
-unifyScheme (Forall a1 x1) (Forall a2 x2) = do
-  s <- unify x1 x2
-  return (s, Forall (applyFvs s a1) (apply s x1))
-  where
-    applyFvs s = mapMaybe (replaceFv s)
-    replaceFv s k = maybe (Just k) found $ Map.lookup k s
-    found (Variable i _) = Just i
-    found _              = Nothing
+-- annot -> ty -> subst
+-- TODO: Refactoring (lots of common code with `unify`)
+unifyAnnot :: Type -> Type -> Infer Subst
+unifyAnnot (Function a1 b1) (Function a2 b2) = do
+  s_a <- unifyAnnot a1 a2
+  s_b <- unifyAnnot (apply s_a b1) (apply s_a b2)
+  return $ s_a `compose` s_b
+unifyAnnot t (Variable i _) = bind i t
+unifyAnnot (Variable i _) t = throwError $ RigidUnificationFail i t
+unifyAnnot Integer Integer = return nullSubst
+unifyAnnot (Tuple a) (Tuple b) = foldr compose nullSubst <$> zipWithM unifyAnnot a b
+unifyAnnot t1 t2 = throwError $ UnificationFail t1 t2
 
 bind :: Int -> Type -> Infer Subst
 bind i (Variable i' _) | i' == i = return nullSubst
@@ -228,20 +232,20 @@ inferExpr (N.Apply a b) = do
     return (s3 `compose` s2 `compose` s1, apply s3 tv)
 inferExpr (N.LetIn annots defs body) = do
     (s1, tys) <- pushLevel $ inferExprs defs
-    (s2s, schemes) <- unzip <$> zipWithM zipper annots tys
-    let s2 = foldr compose s1 s2s
-    (s3, ty) <-
-      withSubst s2 $
+    schemes <- zipWithM zipper tys annots
+    (s2, ty) <-
+      withSubst s1 $
         withLocals schemes $
           inferExpr body
-    return (s2 `compose` s3, ty)
+    return (s1 `compose` s2, ty)
   where
-    zipper annot ty = do
-      a <- generalize ty
-      maybe (return (nullSubst, a)) (go a) annot
-    go a annot = do
-      scheme <- translateScheme Map.empty annot
-      unifyScheme a scheme
+    zipper t = maybe (generalize t) (go t)
+    go t1 annot = do
+      scheme <- translateScheme annot
+      let (Forall _ t2) = scheme
+      -- we don't need the result of `unifyAnnot`
+      -- see the comment below in inferDefs
+      unifyAnnot t2 t1 >> return scheme
 inferExpr (N.BinaryOp op a b) =
     let op_type = Integer in
     do
@@ -268,18 +272,26 @@ inferExpr (N.If c t e) = do
 inferDefs :: Map.Map String Scheme -> [N.Def] -> Infer ()
 inferDefs sig (N.Name name body:xs) = do
   (s1, t) <- pushLevel $ inferExpr body
-  a <- generalize t
-  (s2, scheme) <- maybe (return (nullSubst, a)) (unifyScheme a) $ Map.lookup name sig
-  withGlobal name scheme $ withSubst (s1 `compose` s2) $ inferDefs sig xs
+  scheme <- case Map.lookup name sig of
+    -- there is no need to use the resulting subst of `unifyAnnot`
+    -- because the resulting type is surely `annot`,
+    -- and all we need to do here is to check that `t` is compatible with `annot`
+    Just s@(Forall _ annot) -> unifyAnnot annot t >> return s
+    Nothing                 -> generalize t
+  withGlobal name scheme $ withSubst s1 $ inferDefs sig xs
 inferDefs _ [] = return ()
 
 inferCode :: N.Code -> Infer ()
-inferCode (N.Code sig defs) = flip inferDefs defs =<< mapMapM (translateScheme Map.empty) sig
+inferCode (N.Code sig defs) = flip inferDefs defs =<< mapMapM translateScheme sig
 
 -- TODO: Refactoring
 type NameEnv = Map.Map String Type
-translateScheme :: NameEnv -> P.TypeScheme -> Infer Scheme
-translateScheme env (P.Forall as x) = do
+
+translateScheme :: P.TypeScheme -> Infer Scheme
+translateScheme = translateScheme' $ Map.fromList [("Int", Integer)]
+
+translateScheme' :: NameEnv -> P.TypeScheme -> Infer Scheme
+translateScheme' env (P.Forall as x) = do
   vars <- replicateM (length as) freshBound
   let newEnv = env `Map.union` Map.fromList (zip as vars)
   return $ Forall (map destruct vars) $ translateTyExpr newEnv x
