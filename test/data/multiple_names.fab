@@ -1,14 +1,14 @@
-name is_even n =
+name isEven n =
   if n == 0
   then 1
-  else is_odd (n - 1)
+  else isOdd (n - 1)
 
-name is_odd n =
+name isOdd n =
   if n == 0
   then 0
-  else is_even (n - 1)
+  else isEven (n - 1)
 
-name main = is_even (f 0 10)
+name main = isEven (f 0 10)
   where
   - f i x =
       if x == 0
