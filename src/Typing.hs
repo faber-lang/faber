@@ -5,10 +5,12 @@ import           Control.Monad.Reader
 import           Control.Monad.State
 import           Data.Foldable
 import qualified Data.Map             as Map
+import           Data.Maybe           (fromMaybe, mapMaybe)
 import qualified Data.Set             as Set
 import           Data.Tuple.Extra
 
 import qualified Nameless as N
+import qualified Parse    as P
 import           Utils
 
 type TVar = Int
@@ -154,6 +156,16 @@ unify Integer Integer = return nullSubst
 unify (Tuple a) (Tuple b) = foldr compose nullSubst <$> zipWithM unify a b
 unify t1 t2 = throwError $ UnificationFail t1 t2
 
+unifyScheme :: Scheme -> Scheme -> Infer (Scheme, Subst)
+unifyScheme (Forall a1 x1) (Forall a2 x2) = do
+  s <- unify x1 x2
+  return (Forall (applyFvs s a1) (apply s x1), s)
+  where
+    applyFvs s = mapMaybe (replaceFv s)
+    replaceFv s k = maybe (Just k) found $ Map.lookup k s
+    found (Variable i _) = Just i
+    found _              = Nothing
+
 bind :: Int -> Type -> Infer Subst
 bind i (Variable i' _) | i' == i = return nullSubst
 bind i t | occursCheck i t = throwError $ InfiniteType i t
@@ -214,7 +226,7 @@ inferExpr (N.Apply a b) = do
     (s2, b_ty) <- withSubst s1 $ inferExpr b
     s3 <- unify (apply s2 a_ty) (Function b_ty tv)
     return (s3 `compose` s2 `compose` s1, apply s3 tv)
-inferExpr (N.LetIn defs body) = do
+inferExpr (N.LetIn _ defs body) = do
     (s1, tys) <- pushLevel $ inferExprs defs
     schemes <- mapM generalize tys
     (s2, ty) <-
@@ -245,12 +257,33 @@ inferExpr (N.If c t e) = do
   s5 <- unify t2 t3
   return (s1 `compose` s2 `compose` s3 `compose` s4 `compose` s5, apply s5 t2)
 
-inferDefs :: N.Code -> Infer ()
-inferDefs (N.Name (N.NameDef name body):xs) = do
-  (s, t) <- pushLevel $ inferExpr body
+inferDefs :: Map.Map String Scheme -> [N.Def] -> Infer ()
+inferDefs sig (N.Name name body:xs) = do
+  (s1, t) <- pushLevel $ inferExpr body
   a <- generalize t
-  withGlobal name a $ withSubst s $ inferDefs xs
-inferDefs [] = return ()
+  (scheme, s2) <- maybe (return (a, nullSubst)) (unifyScheme a) $ Map.lookup name sig
+  withGlobal name scheme $ withSubst (s1 `compose` s2) $ inferDefs sig xs
+inferDefs _ [] = return ()
+
+inferCode :: N.Code -> Infer ()
+inferCode (N.Code sig defs) = flip inferDefs defs =<< mapMapM (translateScheme Map.empty) sig
+
+-- TODO: Refactoring
+type NameEnv = Map.Map String Type
+translateScheme :: NameEnv -> P.TypeScheme -> Infer Scheme
+translateScheme env (P.Forall as x) = do
+  vars <- replicateM (length as) freshBound
+  let newEnv = env `Map.union` Map.fromList (zip as vars)
+  return $ Forall (map destruct vars) $ translateTyExpr newEnv x
+  where
+    destruct (Variable i _) = i
+
+translateTyExpr :: NameEnv -> P.TypeExpr -> Type
+translateTyExpr env (P.Ident x) = fromMaybe err $ Map.lookup x env
+  where
+    err = error $ "unbound type identifier " ++ show x
+translateTyExpr env (P.Function a b) = Function (translateTyExpr env a) (translateTyExpr env b)
+translateTyExpr env (P.Product xs) = Tuple $ map (translateTyExpr env) xs
 
 typing :: N.Code -> Either TypeError ()
-typing = runInfer . inferDefs
+typing = runInfer . inferCode
