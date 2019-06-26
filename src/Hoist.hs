@@ -28,7 +28,7 @@ data Expr
   | LetIn [Expr] Expr
   deriving (Show, Eq)
 
-newtype Def = Name String Expr deriving (Show, Eq)
+data Def = Name String Expr deriving (Show, Eq)
 
 data Code =
   Code { definitions :: [Def]

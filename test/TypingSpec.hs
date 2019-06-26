@@ -60,7 +60,7 @@ spec = do
     it "type poymorphic functions" $ do
       -- let f x = x in f f (f 1)
       let fRef = LetBound $ LetIndex 0 0 0 0 in
-        typeExpr (LetIn [Lambda $ var 0] $ Apply (Apply fRef fRef) (Apply fRef (int 1))) `shouldBe` Right T.Integer
+        typeExpr (LetIn [] [Lambda $ var 0] $ Apply (Apply fRef fRef) (Apply fRef (int 1))) `shouldBe` Right T.Integer
 
     it "doesn't generalize lambda params" $ do
       -- (\f => (f 0, f (\x => x))) (\x => x)

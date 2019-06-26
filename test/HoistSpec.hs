@@ -8,8 +8,8 @@ hoistTest :: C.Expr -> ([Function], Expr)
 hoistTest = destruct . hoist . makeCode
   where
     -- this integer is dummy
-    makeCode e = C.Code [C.Name (C.NameDef "main" e)] (C.Integer 0)
-    destruct (Module funs (Code [Name (NameDef "main" e)] _)) = (funs, e)
+    makeCode e = C.Code [C.Name "main" e] (C.Integer 0)
+    destruct (Module funs (Code [Name "main" e] _)) = (funs, e)
 
 spec :: Spec
 spec = do
