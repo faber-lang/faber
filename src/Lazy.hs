@@ -29,11 +29,7 @@ data Expr
   | LetIn [Expr] Expr
   deriving (Show, Eq)
 
-data NameDef
-  = NameDef String Expr
-  deriving (Show, Eq)
-
-newtype Def = Name NameDef deriving (Show, Eq)
+data Def = Name String Expr deriving (Show, Eq)
 
 data Code =
   Code { definitions :: [Def]
@@ -108,11 +104,8 @@ lazyExpr (N.Lambda body)     = Lambda $ lazyExpr body
 lazyExpr (N.LetIn defs body) = LetIn (map lazify defs) $ lazyExpr body
 lazyExpr (N.If c t e)        = If (lazyExpr c) (lazyExpr t) (lazyExpr e)
 
-lazyNameDef :: N.NameDef -> NameDef
-lazyNameDef (N.NameDef name body) = NameDef name $ lazify body
-
 lazyDef :: N.Def -> Def
-lazyDef (N.Name body) = Name $ lazyNameDef body
+lazyDef (N.Name name body) = Name name $ lazify body
 
 lazy :: N.Code -> Code
 lazy code = Code defs entry
