@@ -156,10 +156,10 @@ unify Integer Integer = return nullSubst
 unify (Tuple a) (Tuple b) = foldr compose nullSubst <$> zipWithM unify a b
 unify t1 t2 = throwError $ UnificationFail t1 t2
 
-unifyScheme :: Scheme -> Scheme -> Infer (Scheme, Subst)
+unifyScheme :: Scheme -> Scheme -> Infer (Subst, Scheme)
 unifyScheme (Forall a1 x1) (Forall a2 x2) = do
   s <- unify x1 x2
-  return (Forall (applyFvs s a1) (apply s x1), s)
+  return (s, Forall (applyFvs s a1) (apply s x1))
   where
     applyFvs s = mapMaybe (replaceFv s)
     replaceFv s k = maybe (Just k) found $ Map.lookup k s
@@ -261,7 +261,7 @@ inferDefs :: Map.Map String Scheme -> [N.Def] -> Infer ()
 inferDefs sig (N.Name name body:xs) = do
   (s1, t) <- pushLevel $ inferExpr body
   a <- generalize t
-  (scheme, s2) <- maybe (return (a, nullSubst)) (unifyScheme a) $ Map.lookup name sig
+  (s2, scheme) <- maybe (return (nullSubst, a)) (unifyScheme a) $ Map.lookup name sig
   withGlobal name scheme $ withSubst (s1 `compose` s2) $ inferDefs sig xs
 inferDefs _ [] = return ()
 
