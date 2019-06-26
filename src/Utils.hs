@@ -10,6 +10,13 @@ mapMapM f = Map.foldrWithKey folder (return Map.empty)
   where
     folder k v acc = Map.insert k <$> f v <*> acc
 
+mapAndUnzip :: (a -> (b, c)) -> [a] -> ([b], [c])
+mapAndUnzip f (x:xs) = (a:as, b:bs)
+  where
+    (a, b)   = f x
+    (as, bs) = mapAndUnzip f xs
+mapAndUnzip _ [] = ([], [])
+
 data LetIndex =
   LetIndex { lambdaIndex :: Int
            , localIndex  :: Int
