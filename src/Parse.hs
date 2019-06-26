@@ -31,6 +31,10 @@ data TypeExpr
   = Ident String
   | Function TypeExpr TypeExpr
   | Product [TypeExpr]
+  deriving (Show, Eq)
+
+data TypeScheme
+  = Forall [String] TypeExpr
 
 data NameDef
   = NameDef String [Ident] Expr [NameDef]
@@ -154,6 +158,17 @@ typeTerm = try (parens typeExpr)
 
 typeExpr :: Parser TypeExpr
 typeExpr = makeExprParser typeTerm typeOperators
+
+-- type scheme parser
+typeScheme :: Parser TypeScheme
+typeScheme = Forall <$> binder <*> typeExpr
+  where
+    binder = fromMaybe [] <$> optional forallBinder
+    forallBinder = do
+      rword "forall"
+      vars <- some identifier
+      symbol "."
+      return vars
 
 -- definition parser
 nameDef :: Parser NameDef
