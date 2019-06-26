@@ -28,11 +28,7 @@ data Expr
   | LetIn [Expr] Expr
   deriving (Show, Eq)
 
-data NameDef
-  = NameDef String Expr
-  deriving (Show, Eq)
-
-newtype Def = Name NameDef deriving (Show, Eq)
+data Def = Name String Expr deriving (Show, Eq)
 
 data Code =
   Code { definitions :: [Def]
@@ -101,7 +97,7 @@ closureExpr L.LocalBound = LocalBound
 closureExpr (L.LetIn defs body) = LetIn (map closureExpr defs) (closureExpr body)
 
 closureDef :: L.Def -> Def
-closureDef (L.Name (L.NameDef name body)) = Name $ NameDef name $ closureExpr body
+closureDef (L.Name name body) = Name name $ closureExpr body
 
 closure :: L.Code -> Code
 closure (L.Code defs entry)= Code (map closureDef defs) (closureExpr entry)

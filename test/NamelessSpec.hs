@@ -1,9 +1,11 @@
 module NamelessSpec (spec) where
 
-import Control.Monad.Reader
 
-import qualified Desugar    as D
-import qualified Nameless   as N
+import qualified Desugar  as D
+import qualified Nameless as N
+
+import           Control.Monad.Reader
+import qualified Data.Map             as Map
 import           Test.Hspec
 
 namelessExpr :: D.Expr -> N.Expr
@@ -21,7 +23,7 @@ spec = do
 
   describe "global names" $ do
     it "convert global name reference" $ do
-      N.nameless [D.Name (D.NameDef "a" $ D.Integer 1), D.Name (D.NameDef "main" $ D.Variable "a")] `shouldBe` [N.Name (N.NameDef "a" $ N.Integer 1), N.Name (N.NameDef "main" $ N.GlobalBound "a")]
+      N.nameless [D.Name (D.NameDef "a" $ D.Integer 1), D.Name (D.NameDef "main" $ D.Variable "a")] `shouldBe` N.Code Map.empty [N.Name "a" $ N.Integer 1, N.Name "main" $ N.GlobalBound "a"]
 
   describe "complex examples" $ do
     it "complex example 1" $ do

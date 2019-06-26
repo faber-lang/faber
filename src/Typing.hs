@@ -5,10 +5,12 @@ import           Control.Monad.Reader
 import           Control.Monad.State
 import           Data.Foldable
 import qualified Data.Map             as Map
+import           Data.Maybe           (fromMaybe, mapMaybe)
 import qualified Data.Set             as Set
 import           Data.Tuple.Extra
 
 import qualified Nameless as N
+import qualified Parse    as P
 import           Utils
 
 type TVar = Int
@@ -92,6 +94,7 @@ type Infer = ExceptT TypeError (ReaderT (TypeEnv, Int) (State Unique))
 
 data TypeError
   = UnificationFail Type Type
+  | RigidUnificationFail Int Type
   | InfiniteType Int Type
   | UnboundVariable String
   deriving (Show, Eq)
@@ -154,6 +157,19 @@ unify Integer Integer = return nullSubst
 unify (Tuple a) (Tuple b) = foldr compose nullSubst <$> zipWithM unify a b
 unify t1 t2 = throwError $ UnificationFail t1 t2
 
+-- annot -> ty -> subst
+-- TODO: Refactoring (lots of common code with `unify`)
+unifyAnnot :: Type -> Type -> Infer Subst
+unifyAnnot (Function a1 b1) (Function a2 b2) = do
+  s_a <- unifyAnnot a1 a2
+  s_b <- unifyAnnot (apply s_a b1) (apply s_a b2)
+  return $ s_a `compose` s_b
+unifyAnnot t (Variable i _) = bind i t
+unifyAnnot (Variable i _) t = throwError $ RigidUnificationFail i t
+unifyAnnot Integer Integer = return nullSubst
+unifyAnnot (Tuple a) (Tuple b) = foldr compose nullSubst <$> zipWithM unifyAnnot a b
+unifyAnnot t1 t2 = throwError $ UnificationFail t1 t2
+
 bind :: Int -> Type -> Infer Subst
 bind i (Variable i' _) | i' == i = return nullSubst
 bind i t | occursCheck i t = throwError $ InfiniteType i t
@@ -214,16 +230,22 @@ inferExpr (N.Apply a b) = do
     (s2, b_ty) <- withSubst s1 $ inferExpr b
     s3 <- unify (apply s2 a_ty) (Function b_ty tv)
     return (s3 `compose` s2 `compose` s1, apply s3 tv)
-inferExpr (N.LetIn defs body) = do
-    tvs <- replicateM (length defs) freshFree
-    (s1, tys) <- withLocals (map (Forall []) tvs) $ pushLevel $ inferExprs defs
-    s2 <- foldr compose nullSubst <$> zipWithM unify tvs (map (apply s1) tys)
-    schemes <- mapM generalize tys
-    (s3, ty) <-
-      withSubst s2 $
+inferExpr (N.LetIn annots defs body) = do
+    (s1, tys) <- pushLevel $ inferExprs defs
+    schemes <- zipWithM zipper tys annots
+    (s2, ty) <-
+      withSubst s1 $
         withLocals schemes $
           inferExpr body
-    return (s1 `compose` s2 `compose` s3, ty)
+    return (s1 `compose` s2, ty)
+  where
+    zipper t = maybe (generalize t) (go t)
+    go t1 annot = do
+      scheme <- translateScheme annot
+      let (Forall _ t2) = scheme
+      -- we don't need the result of `unifyAnnot`
+      -- see the comment below in inferDefs
+      unifyAnnot t2 t1 >> return scheme
 inferExpr (N.BinaryOp op a b) =
     let op_type = Integer in
     do
@@ -247,12 +269,41 @@ inferExpr (N.If c t e) = do
   s5 <- unify t2 t3
   return (s1 `compose` s2 `compose` s3 `compose` s4 `compose` s5, apply s5 t2)
 
-inferDefs :: N.Code -> Infer ()
-inferDefs (N.Name (N.NameDef name body):xs) = do
-  (s, t) <- pushLevel $ inferExpr body
-  a <- generalize t
-  withGlobal name a $ withSubst s $ inferDefs xs
-inferDefs [] = return ()
+inferDefs :: Map.Map String Scheme -> [N.Def] -> Infer ()
+inferDefs sig (N.Name name body:xs) = do
+  (s1, t) <- pushLevel $ inferExpr body
+  scheme <- case Map.lookup name sig of
+    -- there is no need to use the resulting subst of `unifyAnnot`
+    -- because the resulting type is surely `annot`,
+    -- and all we need to do here is to check that `t` is compatible with `annot`
+    Just s@(Forall _ annot) -> unifyAnnot annot t >> return s
+    Nothing                 -> generalize t
+  withGlobal name scheme $ withSubst s1 $ inferDefs sig xs
+inferDefs _ [] = return ()
+
+inferCode :: N.Code -> Infer ()
+inferCode (N.Code sig defs) = flip inferDefs defs =<< mapMapM translateScheme sig
+
+-- TODO: Refactoring
+type NameEnv = Map.Map String Type
+
+translateScheme :: P.TypeScheme -> Infer Scheme
+translateScheme = translateScheme' $ Map.fromList [("Int", Integer)]
+
+translateScheme' :: NameEnv -> P.TypeScheme -> Infer Scheme
+translateScheme' env (P.Forall as x) = do
+  vars <- replicateM (length as) freshBound
+  let newEnv = env `Map.union` Map.fromList (zip as vars)
+  return $ Forall (map destruct vars) $ translateTyExpr newEnv x
+  where
+    destruct (Variable i _) = i
+
+translateTyExpr :: NameEnv -> P.TypeExpr -> Type
+translateTyExpr env (P.Ident x) = fromMaybe err $ Map.lookup x env
+  where
+    err = error $ "unbound type identifier " ++ show x
+translateTyExpr env (P.Function a b) = Function (translateTyExpr env a) (translateTyExpr env b)
+translateTyExpr env (P.Product xs) = Tuple $ map (translateTyExpr env) xs
 
 typing :: N.Code -> Either TypeError ()
-typing = runInfer . inferDefs
+typing = runInfer . inferCode
