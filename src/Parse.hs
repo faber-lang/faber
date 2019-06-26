@@ -39,8 +39,8 @@ type Code = [Def]
 type Parser = Parsec Void String
 
 -- lexer utils
-head_rws :: [Parser ()]
-head_rws = [char_ '-', string_ "name", string_ "type", string_ "::"]
+headRws :: [Parser ()]
+headRws = [char_ '-', string_ "name", string_ "type", string_ "::"]
   where
     char_   = void . C.char
     string_ = void . C.string
@@ -50,7 +50,7 @@ space = L.space skip line block
   where
     line = L.skipLineComment "//"
     block = L.skipBlockComment "/*" "*/"
-    skip = notFollowedBy (lexeme_ C.newline >> choice head_rws) >> (lexeme_ C.newline <|> sc)
+    skip = notFollowedBy (lexeme_ C.newline >> choice headRws) >> (lexeme_ C.newline <|> sc)
     sc = void $ some (C.char ' ' <|> C.char '\t')
 
 lexeme :: Parser a -> Parser a
