@@ -157,7 +157,7 @@ typeIdentifier = identifier' typeRws
 
 typeOperators :: [[Operator Parser TypeExpr]]
 typeOperators =
-  [ [ InfixL (Function <$ symbol "->") ] ]
+  [ [ InfixR (Function <$ symbol "->") ] ]
 
 typeProd :: Parser TypeExpr
 typeProd = Product <$> parens (typeExpr `sepEndBy` symbol ",")
