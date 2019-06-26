@@ -80,21 +80,24 @@ integer = lexeme L.decimal
 parens :: Parser a -> Parser a
 parens = between (symbol "(") (symbol ")")
 
-rws :: [String]
-rws = ["let", "in", "where", "name", "if", "then", "else"]
-
 rword :: String -> Parser ()
 rword w = (lexeme . try) (C.string w *> notFollowedBy C.alphaNumChar)
 
 -- the actual parser
-identifier :: Parser Ident
-identifier = (lexeme . try) (p >>= check)
+identifier' :: [String] -> Parser Ident
+identifier' rws = (lexeme . try) (p >>= check)
   where
     p = (:) <$> C.letterChar <*> many C.alphaNumChar
     check x | x `elem` rws = fail $ "attempt to parse " ++ show x ++ "as an identifier"
             | otherwise    = return x
 
 -- expression parser
+exprRws :: [String]
+exprRws = ["let", "in", "where", "name", "if", "then", "else"]
+
+identifier :: Parser Ident
+identifier = identifier' exprRws
+
 tuple :: Parser Expr
 tuple = Tuple <$> parens (expr `sepEndBy` symbol ",")
 
@@ -144,6 +147,12 @@ expr :: Parser Expr
 expr = makeExprParser term operators
 
 -- type expression parser
+typeRws :: [String]
+typeRws = []
+
+typeIdentifier :: Parser String
+typeIdentifier = identifier' typeRws
+
 typeOperators :: [[Operator Parser TypeExpr]]
 typeOperators =
   [ [ InfixL (Function <$ symbol "->") ] ]
@@ -154,7 +163,7 @@ typeProd = Product <$> parens (typeExpr `sepEndBy` symbol ",")
 typeTerm :: Parser TypeExpr
 typeTerm = try (parens typeExpr)
   <|> typeProd
-  <|> Ident <$> identifier
+  <|> Ident <$> typeIdentifier
 
 typeExpr :: Parser TypeExpr
 typeExpr = makeExprParser typeTerm typeOperators
@@ -165,8 +174,8 @@ typeScheme = Forall <$> binder <*> typeExpr
   where
     binder = fromMaybe [] <$> optional forallBinder
     forallBinder = do
-      rword "forall"
-      vars <- some identifier
+      symbol "forall"
+      vars <- some typeIdentifier
       symbol "."
       return vars
 
