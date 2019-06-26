@@ -27,6 +27,11 @@ data Expr
   | If Expr Expr Expr
   deriving (Show, Eq)
 
+data TypeExpr
+  = Ident String
+  | Function TypeExpr TypeExpr
+  | Product [TypeExpr]
+
 data NameDef
   = NameDef String [Ident] Expr [NameDef]
   deriving (Show, Eq)
@@ -133,6 +138,22 @@ term = try (parens expr)
 
 expr :: Parser Expr
 expr = makeExprParser term operators
+
+-- type expression parser
+typeOperators :: [[Operator Parser TypeExpr]]
+typeOperators =
+  [ [ InfixL (Function <$ symbol "->") ] ]
+
+typeProd :: Parser TypeExpr
+typeProd = Product <$> parens (typeExpr `sepEndBy` symbol ",")
+
+typeTerm :: Parser TypeExpr
+typeTerm = try (parens typeExpr)
+  <|> typeProd
+  <|> Ident <$> identifier
+
+typeExpr :: Parser TypeExpr
+typeExpr = makeExprParser typeTerm typeOperators
 
 -- definition parser
 nameDef :: Parser NameDef
