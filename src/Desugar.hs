@@ -1,6 +1,7 @@
 module Desugar where
 
 import qualified Operators as Op
+import           Parse     (TypeScheme)
 import qualified Parse     as P
 
 data Expr
@@ -17,6 +18,7 @@ data Expr
 
 data NameDef
   = NameDef String Expr
+  | TypeAnnot String TypeScheme
   deriving (Show, Eq)
 
 newtype Def = Name NameDef deriving (Show, Eq)
@@ -40,6 +42,8 @@ desugarExpr (P.If c t e)        = If (desugarExpr c) (desugarExpr t) (desugarExp
 desugarNameDef :: P.NameDef -> NameDef
 desugarNameDef (P.NameDef name ps body []) = NameDef name $ desugarLambda ps $ desugarExpr body
 desugarNameDef (P.NameDef name ps body defs) = NameDef name $ LetIn (map desugarNameDef defs) $ desugarLambda ps $ desugarExpr body
+-- using `TypeScheme` from `Parse` directly
+desugarNameDef (P.TypeAnnot name ty) = TypeAnnot name ty
 
 desugarDef :: P.Def -> Def
 desugarDef (P.Name body) = Name $ desugarNameDef body

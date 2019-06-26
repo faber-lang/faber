@@ -1,0 +1,8 @@
+name g :: forall a. a -> Int
+name g x = 10
+
+name main :: Int
+name main = f g (\x => x)
+  where
+    - f :: forall a b. (a -> b) -> a -> b
+    - f g x = g x

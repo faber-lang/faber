@@ -5,6 +5,7 @@ import Test.Hspec
 
 import           Nameless
 import           Operators
+import qualified Parse     as P
 import qualified Typing    as T
 import           Utils
 
@@ -35,6 +36,9 @@ int = Integer
 var :: Int -> Expr
 var = ParamBound
 
+fRef :: Expr
+fRef = LetBound $ LetIndex 0 0 0 0
+
 -- test cases
 spec :: Spec
 spec = do
@@ -59,9 +63,16 @@ spec = do
   describe "polymorphism" $ do
     it "type poymorphic functions" $ do
       -- let f x = x in f f (f 1)
-      let fRef = LetBound $ LetIndex 0 0 0 0 in
-        typeExpr (LetIn [Lambda $ var 0] $ Apply (Apply fRef fRef) (Apply fRef (int 1))) `shouldBe` Right T.Integer
+      typeExpr (LetIn [Nothing] [Lambda $ var 0] $ Apply (Apply fRef fRef) (Apply fRef (int 1))) `shouldBe` Right T.Integer
 
     it "doesn't generalize lambda params" $ do
       -- (\f => (f 0, f (\x => x))) (\x => x)
       expectError (Apply (Lambda $ Tuple [Apply (var 0) (int 0), Apply (var 0) (Lambda $ var 0)]) (Lambda $ var 0)) `shouldContain` "UnificationFail"
+
+  describe "type annotation on name definitions" $ do
+    it "unify with inferred type" $ do
+      expectError (LetIn [Just $ P.Forall [] $ P.Function (P.Product []) (P.Product [])] [Lambda $ int 0] $ int 0) `shouldContain` "UnificationFail"
+      expectError (LetIn [Just $ P.Forall [] $ P.Function (P.Product []) (P.Product [])] [Lambda $ var 0] $ Apply fRef (int 0)) `shouldContain` "UnificationFail"
+
+    it "won't unify with rigid type variables" $ do
+      expectError (LetIn [Just $ P.Forall ["a"] $ P.Function (P.Ident "a") (P.Ident "a")] [Lambda $ int 0] $ int 0) `shouldContain` "RigidUnificationFail"

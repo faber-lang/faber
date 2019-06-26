@@ -1,10 +1,14 @@
 module Nameless where
 
-import Control.Monad.Reader
-import Data.List            (elemIndex)
+import           Control.Monad.Reader
+import           Control.Monad.State
+import           Data.Foldable        (foldrM)
+import           Data.List            (elemIndex)
+import qualified Data.Map             as Map
 
 import qualified Desugar   as D
 import qualified Operators as Op
+import           Parse     (TypeScheme)
 import           Utils
 
 data Expr
@@ -17,17 +21,13 @@ data Expr
   | BinaryOp Op.BinaryOp Expr Expr
   | SingleOp Op.SingleOp Expr
   | Tuple [Expr]
-  | LetIn [Expr] Expr
+  | LetIn [Maybe TypeScheme] [Expr] Expr
   | If Expr Expr Expr
   deriving (Show, Eq)
 
-data NameDef
-  = NameDef String Expr
-  deriving (Show, Eq)
+data Def = Name String Expr deriving (Show, Eq)
 
-newtype Def = Name NameDef deriving (Show, Eq)
-
-type Code = [Def]
+data Code = Code (Map.Map String TypeScheme) [Def] deriving (Show, Eq)
 
 -- types for the conversion
 data Binding
@@ -77,15 +77,23 @@ findName s = do
   env <- ask
   return $ runReader (findInEnv env s) initState
 
+type TypeSig = Map.Map String TypeScheme
+type Destructed = ([String], [D.Expr])
+destructDefs :: [D.NameDef] -> (Destructed, TypeSig)
+destructDefs defs = runState (foldrM f ([], []) defs) Map.empty
+  where
+    f :: D.NameDef -> Destructed -> State TypeSig Destructed
+    f (D.NameDef name body) (names, bodies)     = return (name : names, body : bodies)
+    f (D.TypeAnnot name scheme) acc = modify (Map.insert name scheme) >> return acc
+
 namelessExpr :: D.Expr -> Nameless Expr
 namelessExpr (D.Apply fn arg) = Apply <$> namelessExpr fn <*> namelessExpr arg
 namelessExpr (D.Lambda p body) = Lambda <$> withBinding (Param p) (namelessExpr body)
-namelessExpr (D.LetIn defs body) = LetIn <$> defs' <*> withBinding (Let names) (namelessExpr body)
+namelessExpr (D.LetIn defs body) = LetIn schemes <$> bodies' <*> withBinding (Let names) (namelessExpr body)
   where
-    extractBody (D.NameDef _ b) = b
-    extractName (D.NameDef name _) = name
-    defs' = mapM (namelessExpr . extractBody) defs
-    names = map extractName defs
+    ((names, bodies), sig) = destructDefs defs
+    bodies' = mapM namelessExpr bodies
+    schemes = map (`Map.lookup` sig) names
 namelessExpr (D.Variable name) = findName name
 namelessExpr (D.Integer i) = return $ Integer i
 namelessExpr (D.BinaryOp op a b) = BinaryOp op <$> namelessExpr a <*> namelessExpr b
@@ -93,12 +101,15 @@ namelessExpr (D.SingleOp op x) = SingleOp op <$> namelessExpr x
 namelessExpr (D.Tuple xs) = Tuple <$> mapM namelessExpr xs
 namelessExpr (D.If c t e) = If <$> namelessExpr c <*> namelessExpr t <*> namelessExpr e
 
-namelessDefs :: [D.Def] -> Nameless [Def]
+namelessDefs :: [D.Def] -> Nameless Code
 namelessDefs (D.Name (D.NameDef name body):xs) = do
-  def <- Name . NameDef name <$> namelessExpr body
-  xs' <- withBinding (Global name) (namelessDefs xs)
-  return $ def : xs'
-namelessDefs [] = return []
+  def <- Name name <$> namelessExpr body
+  Code annot xs' <- withBinding (Global name) (namelessDefs xs)
+  return $ Code annot $ def : xs'
+namelessDefs (D.Name (D.TypeAnnot name scheme):xs) = do
+  Code annot xs' <- namelessDefs xs
+  return $ Code (Map.insert name scheme annot) xs'
+namelessDefs [] = return $ Code Map.empty []
 
 namelessCode :: D.Code -> Nameless Code
 namelessCode = namelessDefs

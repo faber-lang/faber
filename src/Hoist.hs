@@ -28,11 +28,7 @@ data Expr
   | LetIn [Expr] Expr
   deriving (Show, Eq)
 
-data NameDef
-  = NameDef String Expr
-  deriving (Show, Eq)
-
-newtype Def = Name NameDef deriving (Show, Eq)
+data Def = Name String Expr deriving (Show, Eq)
 
 data Code =
   Code { definitions :: [Def]
@@ -78,7 +74,7 @@ hoistExpr C.LocalBound        = return LocalBound
 hoistExpr (C.LetIn defs body) = LetIn <$> mapM hoistExpr defs <*> hoistExpr body
 
 hoistDef :: C.Def -> Hoist Def
-hoistDef (C.Name (C.NameDef name body)) = Name . NameDef name <$> hoistExpr body
+hoistDef (C.Name name body) = Name name <$> hoistExpr body
 
 hoistCode :: C.Code -> Hoist Code
 hoistCode (C.Code defs entry) = Code <$> mapM hoistDef defs <*> hoistExpr entry
