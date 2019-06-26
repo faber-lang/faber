@@ -44,5 +44,6 @@ spec = do
     it "let-in and where" $ execBS $(embedFile "test/data/let_in.fab") `shouldReturn` "47\n"
     it "church numerals" $ execBS $(embedFile "test/data/church.fab") `shouldReturn` "15\n"
     it "let polymorphism" $ execBS $(embedFile "test/data/let_poly.fab") `shouldReturn` "4\n"
+    it "annotation" $ execBS $(embedFile "test/data/annotation.fab") `shouldReturn` "10\n"
 
     it "conditional" $ execBS $(embedFile "test/data/if_then_else.fab") `shouldReturn` "43\n"
