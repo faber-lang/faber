@@ -39,6 +39,12 @@ type Code = [Def]
 type Parser = Parsec Void String
 
 -- lexer utils
+head_rws :: [Parser ()]
+head_rws = [char_ '-', string_ "name", string_ "type", string_ "::"]
+  where
+    char_   = void . C.char
+    string_ = void . C.string
+
 space :: Parser ()
 space = L.space skip line block
   where
