@@ -13,6 +13,14 @@ parse s = case parseCode "" code of
     code = "name main = " ++ s
     destruct [Name (NameDef _ [] body [])] = body
 
+parseTy :: String -> TypeScheme
+parseTy s = case parseCode "" code of
+  Left (ParseError err) -> error err
+  Right t               -> destruct t
+  where
+    code = "name main :: " ++ s
+    destruct [Name (TypeAnnot _ body)] = body
+
 add :: Expr -> Expr -> Expr
 add = BinaryOp Add
 
@@ -108,6 +116,28 @@ spec = do
     it "parse if-then-else" $ do
       parse "if 1 then a + 1 else b + 1" `shouldBe` If (int 1) (var "a" `add` int 1) (var "b" `add` int 1)
       parse "if 1 then if 0 then 1 else 2 else if 1 then 1 else 2" `shouldBe` If (int 1) (If (int 0) (int 1) (int 2)) (If (int 1) (int 1) (int 2))
+
+  describe "type" $ do
+    it "parse type identifiers" $ do
+      parseTy "Int" `shouldBe` Forall [] (Ident "Int")
+      parseTy "if" `shouldBe` Forall [] (Ident "if")
+
+    it "parse function types" $ do
+      parseTy "a -> b" `shouldBe` Forall [] (Function (Ident "a") (Ident "b"))
+      parseTy "a -> a -> a" `shouldBe` Forall [] (Function (Ident "a") (Function (Ident "a") (Ident "a")))
+
+    it "parse product types" $ do
+      parseTy "(a, b)" `shouldBe` Forall [] (Product [Ident "a", Ident "b"])
+      parseTy "(a,)" `shouldBe` Forall [] (Product [Ident "a"])
+      parseTy "()" `shouldBe` Forall [] (Product [])
+
+    it "parse parentheses" $ do
+      parseTy "(a -> b) -> c" `shouldBe` Forall [] (Function (Function (Ident "a") (Ident "b")) (Ident "c"))
+      parseTy "(a)" `shouldBe` Forall [] (Ident "a")
+
+    it "parse quantifiers" $ do
+      parseTy "forall a. a -> a" `shouldBe` Forall ["a"] (Function (Ident "a") (Ident "a"))
+      parseTy "forall a b c. a" `shouldBe` Forall ["a", "b", "c"] (Ident "a")
 
   describe "definition" $ do
     it "parse simple name definitions" $ do
