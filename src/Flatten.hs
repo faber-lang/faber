@@ -87,28 +87,28 @@ replace (L.LetBound i) = L.Deref . L.LetBound <$> asks (conv i)
 runReplace :: L.Expr -> L.Expr
 runReplace x = runReader (replace x) initState
 
-flatten :: L.Expr -> Expr
-flatten (L.Integer i) = Integer i
-flatten (L.Lambda body) = Lambda $ flatten body
-flatten (L.Apply a b) = Apply (flatten a) (flatten b)
-flatten (L.ParamBound i) = ParamBound i
-flatten (L.LetBound (N.LetIndex lam _ loc inn)) = assert (inn == 0) $ LetBound $ LetIndex lam loc
-flatten (L.GlobalBound name) = GlobalBound name
-flatten (L.BinaryOp op a b) = BinaryOp op (flatten a) (flatten b)
-flatten (L.SingleOp op x) = SingleOp op $ flatten x
-flatten (L.Tuple xs) = Tuple $ map flatten xs
-flatten (L.NthOf n x) = NthOf n $ flatten x
-flatten (L.Ref x) = Ref $ flatten x
-flatten (L.Assign a b) = Assign (flatten a) (flatten b)
-flatten (L.Deref x) = Deref $ flatten x
-flatten (L.If c t e) = If (flatten c) (flatten t) (flatten e)
-flatten (L.LocalLet a b) = LocalLet (flatten a) (flatten b)
-flatten L.LocalBound = LocalBound
-flatten (L.LetIn defs body) = foldrN alloc assignments (length defs)
+flattenExpr :: L.Expr -> Expr
+flattenExpr (L.Integer i) = Integer i
+flattenExpr (L.Lambda body) = Lambda $ flattenExpr body
+flattenExpr (L.Apply a b) = Apply (flattenExpr a) (flattenExpr b)
+flattenExpr (L.ParamBound i) = ParamBound i
+flattenExpr (L.LetBound (N.LetIndex lam _ loc inn)) = assert (inn == 0) $ LetBound $ LetIndex lam loc
+flattenExpr (L.GlobalBound name) = GlobalBound name
+flattenExpr (L.BinaryOp op a b) = BinaryOp op (flattenExpr a) (flattenExpr b)
+flattenExpr (L.SingleOp op x) = SingleOp op $ flattenExpr x
+flattenExpr (L.Tuple xs) = Tuple $ map flattenExpr xs
+flattenExpr (L.NthOf n x) = NthOf n $ flattenExpr x
+flattenExpr (L.Ref x) = Ref $ flattenExpr x
+flattenExpr (L.Assign a b) = Assign (flattenExpr a) (flattenExpr b)
+flattenExpr (L.Deref x) = Deref $ flattenExpr x
+flattenExpr (L.If c t e) = If (flattenExpr c) (flattenExpr t) (flattenExpr e)
+flattenExpr (L.LocalLet a b) = LocalLet (flattenExpr a) (flattenExpr b)
+flattenExpr L.LocalBound = LocalBound
+flattenExpr (L.LetIn defs body) = foldrN alloc assignments (length defs)
   where
-    body' = flatten $ runReplace body
+    body' = flattenExpr $ runReplace body
     assignments = foldr Seq body' $ imap makeAssign defs
-    makeAssign n x = Assign (nthAlloc n) (flatten (runReplace x))
+    makeAssign n x = Assign (nthAlloc n) (flattenExpr (runReplace x))
     nthAlloc = LetBound . LetIndex 0
     alloc = LetIn Alloc
 
@@ -131,10 +131,10 @@ replaceGlobal (L.LocalLet a b) = L.LocalLet (replaceGlobal a) (replaceGlobal b)
 replaceGlobal L.LocalBound = L.LocalBound
 replaceGlobal (L.LetIn defs body) = L.LetIn (map replaceGlobal defs) (replaceGlobal body)
 
-flattenCode :: L.Code -> Code
-flattenCode (L.Code defs entry) = Code defs' entry'
+flatten :: L.Code -> Code
+flatten (L.Code defs entry) = Code defs' entry'
   where
     fillAlloc (L.Name name _) = Name name Alloc
-    folder (L.Name k v) = Seq (Assign (GlobalBound k) (flatten (replaceGlobal v)))
+    folder (L.Name k v) = Seq (Assign (GlobalBound k) (flattenExpr (replaceGlobal v)))
     defs' = map fillAlloc defs
-    entry' = foldr folder (flatten (replaceGlobal entry)) defs
+    entry' = foldr folder (flattenExpr (replaceGlobal entry)) defs
