@@ -2,7 +2,6 @@ module Hoist where
 
 import qualified Closure             as C
 import           Control.Monad.State
-import qualified Nameless            as N
 import qualified Operators           as Op
 import           Utils
 
@@ -14,7 +13,7 @@ data Expr
   | Parameter Int
   | FunctionRef Int
   | NameRef String
-  | LetRef N.LetIndex
+  | LetRef Int
   | Call Expr [Expr]
   | BinaryOp Op.BinaryOp Expr Expr
   | SingleOp Op.SingleOp Expr
@@ -22,11 +21,13 @@ data Expr
   | NthOf Int Expr
   | LocalLet Expr Expr
   | LocalBound
+  | Alloc
   | Ref Expr
   | Assign Expr Expr
+  | Seq Expr Expr
   | Deref Expr
   | If Expr Expr Expr
-  | LetIn [Expr] Expr
+  | LetIn Expr Expr
   deriving (Show, Eq)
 
 data Def = Name String Expr deriving (Show, Eq)
@@ -68,11 +69,13 @@ hoistExpr (C.Tuple xs)        = Tuple <$> mapM hoistExpr xs
 hoistExpr (C.NthOf i x)       = NthOf i <$> hoistExpr x
 hoistExpr (C.Ref x)           = Ref <$> hoistExpr x
 hoistExpr (C.Assign a b)      = Assign <$> hoistExpr a <*> hoistExpr b
+hoistExpr (C.Seq a b)         = Seq <$> hoistExpr a <*> hoistExpr b
 hoistExpr (C.Deref x)         = Deref <$> hoistExpr x
 hoistExpr (C.If c t e)        = If <$> hoistExpr c <*> hoistExpr t <*> hoistExpr e
 hoistExpr (C.LocalLet a b)    = LocalLet <$> hoistExpr a <*> hoistExpr b
 hoistExpr C.LocalBound        = return LocalBound
-hoistExpr (C.LetIn defs body) = LetIn <$> mapM hoistExpr defs <*> hoistExpr body
+hoistExpr C.Alloc             = return Alloc
+hoistExpr (C.LetIn def body)  = LetIn <$> hoistExpr def <*> hoistExpr body
 
 hoistDef :: C.Def -> Hoist Def
 hoistDef (C.Name name body) = Name name <$> hoistExpr body
