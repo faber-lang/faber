@@ -16,3 +16,9 @@ mapAndUnzip f (x:xs) = (a:as, b:bs)
     (a, b)   = f x
     (as, bs) = mapAndUnzip f xs
 mapAndUnzip _ [] = ([], [])
+
+foldrN :: (Num i, Enum i) => (a -> a) -> a -> i -> a
+foldrN f x n = foldr (const f) x [0..n]
+
+imap :: (Num i, Enum i) => (i -> a -> b) -> [a] -> [b]
+imap f = zipWith f [0..]
