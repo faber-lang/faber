@@ -122,8 +122,8 @@ findParam i = do
   (env, _) <- ask
   return $ lookupParam env i
 
-findLocal :: LetIndex -> Infer Scheme
-findLocal (LetIndex _ _ local inner) = do
+findLocal :: N.LetIndex -> Infer Scheme
+findLocal (N.LetIndex _ _ local inner) = do
   (env, _) <- ask
   return $ lookupLocal env local inner
 

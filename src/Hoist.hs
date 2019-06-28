@@ -2,6 +2,7 @@ module Hoist where
 
 import qualified Closure             as C
 import           Control.Monad.State
+import qualified Nameless            as N
 import qualified Operators           as Op
 import           Utils
 
@@ -13,7 +14,7 @@ data Expr
   | Parameter Int
   | FunctionRef Int
   | NameRef String
-  | LetRef LetIndex
+  | LetRef N.LetIndex
   | Call Expr [Expr]
   | BinaryOp Op.BinaryOp Expr Expr
   | SingleOp Op.SingleOp Expr

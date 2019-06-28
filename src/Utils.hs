@@ -16,13 +16,3 @@ mapAndUnzip f (x:xs) = (a:as, b:bs)
     (a, b)   = f x
     (as, bs) = mapAndUnzip f xs
 mapAndUnzip _ [] = ([], [])
-
-data LetIndex =
-  LetIndex { lambdaIndex :: Int
-           , localIndex  :: Int
-           , letIndex    :: Int
-           , innerIndex  :: Int }
-  deriving (Show, Eq)
-
-mapLambdaIndex :: (Int -> Int) -> LetIndex -> LetIndex
-mapLambdaIndex f (LetIndex lamI locI letI innI) = LetIndex (f lamI) locI letI innI

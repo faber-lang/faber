@@ -26,9 +26,10 @@ import qualified LLVM.IRBuilder.Monad       as IR
 import qualified LLVM.Context as LLVM
 import qualified LLVM.Module  as LLVM
 
-import Hoist
-import Operators as Op
-import Utils
+import           Hoist
+import qualified Nameless  as N
+import qualified Operators as Op
+import           Utils
 
 -- TODO: every function takes two parameters, fix it with typing
 
@@ -69,8 +70,8 @@ withLetBound :: MonadReader Env m => [AST.Operand] -> m AST.Operand -> m AST.Ope
 withLetBound bs = local update
   where
     update x = x { letBound = bs : letBound x }
-getLetBound :: MonadReader Env m => LetIndex -> m AST.Operand
-getLetBound (LetIndex 0 locI _ innI) = asks $ (!! innI) . (!! locI) . letBound
+getLetBound :: MonadReader Env m => N.LetIndex -> m AST.Operand
+getLetBound (N.LetIndex 0 locI _ innI) = asks $ (!! innI) . (!! locI) . letBound
 
 initEnv :: Env
 initEnv = Env Nothing [] []

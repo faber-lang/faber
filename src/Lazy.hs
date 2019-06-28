@@ -14,7 +14,7 @@ data Expr
   | Lambda Expr
   | Apply Expr Expr
   | ParamBound Int
-  | LetBound LetIndex
+  | LetBound N.LetIndex
   | GlobalBound String
   | BinaryOp Op.BinaryOp Expr Expr
   | SingleOp Op.SingleOp Expr
@@ -42,9 +42,9 @@ liftVars :: N.Expr -> Lift N.Expr
 liftVars (N.ParamBound i) = bool (N.ParamBound i) (N.ParamBound $ i + 1) <$> asks shouldLift
   where
     shouldLift (n, _) = i >= n
-liftVars (N.LetBound i) = bool (N.LetBound i) (N.LetBound $ mapLambdaIndex succ i) <$> asks (shouldLift i)
+liftVars (N.LetBound i) = bool (N.LetBound i) (N.LetBound $ N.mapLambdaIndex succ i) <$> asks (shouldLift i)
   where
-    shouldLift (LetIndex lam loc _  _) (n, m) = lam > n || (lam == n && loc >= m)
+    shouldLift (N.LetIndex lam loc _  _) (n, m) = lam > n || (lam == n && loc >= m)
 liftVars (N.GlobalBound s)         = return $ N.GlobalBound s
 liftVars (N.Integer i)             = return $ N.Integer i
 liftVars (N.Lambda x)              = N.Lambda <$> local (first succ) (liftVars x)

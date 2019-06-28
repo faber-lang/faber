@@ -12,6 +12,16 @@ import qualified Operators as Op
 import           Parse     (TypeScheme)
 import           Utils
 
+data LetIndex =
+  LetIndex { lambdaIndex :: Int
+           , localIndex  :: Int
+           , letIndex    :: Int
+           , innerIndex  :: Int }
+  deriving (Show, Eq)
+
+mapLambdaIndex :: (Int -> Int) -> LetIndex -> LetIndex
+mapLambdaIndex f (LetIndex lamI locI letI innI) = LetIndex (f lamI) locI letI innI
+
 data Expr
   = Integer Int
   | Lambda Expr

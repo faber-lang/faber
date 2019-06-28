@@ -4,6 +4,7 @@ import Control.Monad.State
 import Data.List
 
 import qualified Lazy      as L
+import qualified Nameless  as N
 import qualified Operators as Op
 import           Utils
 
@@ -13,7 +14,7 @@ data Expr
   | GlobalName String
   | Parameter
   | Env
-  | LetBound LetIndex
+  | LetBound N.LetIndex
   | Apply Expr Expr
   | BinaryOp Op.BinaryOp Expr Expr
   | SingleOp Op.SingleOp Expr
@@ -51,8 +52,8 @@ closureBody :: L.Expr -> Closure Expr
 closureBody (L.ParamBound 0) = return Parameter
 closureBody (L.ParamBound i) = flip NthOf Env <$> update (L.ParamBound $ i - 1)
 closureBody (L.GlobalBound s) = flip NthOf Env <$> update (L.GlobalBound s)
-closureBody (L.LetBound i) | lambdaIndex i == 0 = return $ LetBound i
-                           | otherwise          = flip NthOf Env <$> update (L.LetBound $ mapLambdaIndex pred i)
+closureBody (L.LetBound i) | N.lambdaIndex i == 0 = return $ LetBound i
+                           | otherwise            = flip NthOf Env <$> update (L.LetBound $ N.mapLambdaIndex pred i)
 closureBody (L.Lambda e) = do
   t <- closureBody $ L.Tuple fvs
   return $ Tuple [Function body, t]
@@ -75,8 +76,8 @@ closureBody (L.LetIn defs body) = LetIn <$> mapM closureBody defs <*> closureBod
 -- closure a top-level expression
 closureExpr :: L.Expr -> Expr
 closureExpr (L.ParamBound i) = error $ "Invalid occurrence of parameter " ++ show i
-closureExpr (L.LetBound i) | lambdaIndex i == 0 = LetBound i
-                           | otherwise          = error $ "Invalid occurrence of variable " ++ show i
+closureExpr (L.LetBound i) | N.lambdaIndex i == 0 = LetBound i
+                           | otherwise            = error $ "Invalid occurrence of variable " ++ show i
 closureExpr (L.GlobalBound s) = GlobalName s
 closureExpr (L.Lambda e) = Tuple [Function body, t]
   where
