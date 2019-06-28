@@ -27,7 +27,6 @@ import qualified LLVM.Context as LLVM
 import qualified LLVM.Module  as LLVM
 
 import           Hoist
-import qualified Nameless  as N
 import qualified Operators as Op
 import           Utils
 
@@ -58,7 +57,7 @@ callMalloc' len = do
 data Env =
   Env { localBound :: Maybe AST.Operand
       , args       :: [AST.Operand]
-      , letBound   :: [[AST.Operand]] }
+      , letBound   :: [AST.Operand] }
 withLocalBound :: MonadReader Env m => AST.Operand -> m AST.Operand -> m AST.Operand
 withLocalBound newBound = local update
   where
@@ -66,12 +65,12 @@ withLocalBound newBound = local update
 getLocalBound :: MonadReader Env m => m AST.Operand
 getLocalBound = asks $ fromJust . localBound
 
-withLetBound :: MonadReader Env m => [AST.Operand] -> m AST.Operand -> m AST.Operand
+withLetBound :: MonadReader Env m => AST.Operand -> m AST.Operand -> m AST.Operand
 withLetBound bs = local update
   where
     update x = x { letBound = bs : letBound x }
-getLetBound :: MonadReader Env m => N.LetIndex -> m AST.Operand
-getLetBound (N.LetIndex 0 locI _ innI) = asks $ (!! innI) . (!! locI) . letBound
+getLetBound :: MonadReader Env m => Int -> m AST.Operand
+getLetBound idx = asks $ (!! idx) . letBound
 
 initEnv :: Env
 initEnv = Env Nothing [] []
@@ -112,9 +111,9 @@ genExpr (LocalLet e x) = do
   e' <- genExpr e
   withLocalBound e' $ genExpr x
 genExpr LocalBound = getLocalBound
-genExpr (LetIn defs body) = do
-  defs' <- mapM genExpr defs
-  withLetBound defs' $ genExpr body
+genExpr (LetIn def body) = do
+  def' <- genExpr def
+  withLetBound def' $ genExpr body
 genExpr (BinaryOp op l r) = join $ apply_op <$> genExpr l <*> genExpr r
   where
     apply_op a b = do
@@ -142,11 +141,14 @@ genExpr (SingleOp op e) = apply_op =<< genExpr e
         Op.Negative -> IR.sub $ constInt 0
         Op.Positive -> return
 
+genExpr Alloc = callMalloc' $ constInt 8
 genExpr (Ref e) = do
   e' <- genExpr e
   m <- callMalloc' $ constInt 8
   IR.store m 0 e'
   IR.bitcast m genericPtr
+
+genExpr (Seq l r) = genExpr l >> genExpr r
 
 genExpr (Assign l r) = do
   l' <- genExpr l
