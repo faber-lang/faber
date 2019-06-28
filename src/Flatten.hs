@@ -24,7 +24,8 @@ data Expr
   | SingleOp Op.SingleOp Expr
   | Tuple [Expr]
   | NthOf Int Expr
-  | Ref (Maybe Expr)
+  | Alloc
+  | Ref Expr
   | Assign Expr Expr
   | Seq Expr Expr
   | Deref Expr
@@ -97,7 +98,7 @@ flatten (L.BinaryOp op a b) = BinaryOp op (flatten a) (flatten b)
 flatten (L.SingleOp op x) = SingleOp op $ flatten x
 flatten (L.Tuple xs) = Tuple $ map flatten xs
 flatten (L.NthOf n x) = NthOf n $ flatten x
-flatten (L.Ref x) = Ref $ Just $ flatten x
+flatten (L.Ref x) = Ref $ flatten x
 flatten (L.Assign a b) = Assign (flatten a) (flatten b)
 flatten (L.Deref x) = Deref $ flatten x
 flatten (L.If c t e) = If (flatten c) (flatten t) (flatten e)
@@ -109,4 +110,4 @@ flatten (L.LetIn defs body) = foldrN alloc assignments (length defs)
     assignments = foldr Seq body' $ imap makeAssign defs
     makeAssign n x = Assign (nthAlloc n) (flatten (runReplace x))
     nthAlloc = LetBound . LetIndex 0
-    alloc = LetIn (Ref Nothing)
+    alloc = LetIn Alloc
