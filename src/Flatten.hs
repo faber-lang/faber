@@ -111,3 +111,30 @@ flatten (L.LetIn defs body) = foldrN alloc assignments (length defs)
     makeAssign n x = Assign (nthAlloc n) (flatten (runReplace x))
     nthAlloc = LetBound . LetIndex 0
     alloc = LetIn Alloc
+
+replaceGlobal :: L.Expr -> L.Expr
+replaceGlobal (L.Integer i) = L.Integer i
+replaceGlobal (L.Lambda body) = L.Lambda $ replaceGlobal body
+replaceGlobal (L.Apply a b) = L.Apply (replaceGlobal a) (replaceGlobal b)
+replaceGlobal (L.ParamBound i) = L.ParamBound i
+replaceGlobal (L.LetBound i) = L.LetBound i
+replaceGlobal (L.GlobalBound name) = L.Deref $ L.GlobalBound name
+replaceGlobal (L.BinaryOp op a b) = L.BinaryOp op (replaceGlobal a) (replaceGlobal b)
+replaceGlobal (L.SingleOp op x) = L.SingleOp op $ replaceGlobal x
+replaceGlobal (L.Tuple xs) = L.Tuple $ map replaceGlobal xs
+replaceGlobal (L.NthOf n x) = L.NthOf n $ replaceGlobal x
+replaceGlobal (L.Ref x) = L.Ref $ replaceGlobal x
+replaceGlobal (L.Assign a b) = L.Assign (replaceGlobal a) (replaceGlobal b)
+replaceGlobal (L.Deref x) = L.Deref $ replaceGlobal x
+replaceGlobal (L.If c t e) = L.If (replaceGlobal c) (replaceGlobal t) (replaceGlobal e)
+replaceGlobal (L.LocalLet a b) = L.LocalLet (replaceGlobal a) (replaceGlobal b)
+replaceGlobal L.LocalBound = L.LocalBound
+replaceGlobal (L.LetIn defs body) = L.LetIn (map replaceGlobal defs) (replaceGlobal body)
+
+flattenCode :: L.Code -> Code
+flattenCode (L.Code defs entry) = Code defs' entry'
+  where
+    fillAlloc (L.Name name _) = Name name Alloc
+    folder (L.Name k v) = Seq (Assign (GlobalBound k) (flatten (replaceGlobal v)))
+    defs' = map fillAlloc defs
+    entry' = foldr folder (flatten (replaceGlobal entry)) defs
