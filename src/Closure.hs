@@ -3,8 +3,7 @@ module Closure where
 import Control.Monad.State
 import Data.List
 
-import qualified Lazy      as L
-import qualified Nameless  as N
+import qualified Flatten   as F
 import qualified Operators as Op
 import           Utils
 
@@ -14,19 +13,21 @@ data Expr
   | GlobalName String
   | Parameter
   | Env
-  | LetBound N.LetIndex
+  | LetBound Int
   | Apply Expr Expr
   | BinaryOp Op.BinaryOp Expr Expr
   | SingleOp Op.SingleOp Expr
   | Tuple [Expr]
   | NthOf Int Expr
+  | Alloc
   | Ref Expr
   | Assign Expr Expr
+  | Seq Expr Expr
   | Deref Expr
   | If Expr Expr Expr
   | LocalLet Expr Expr
   | LocalBound
-  | LetIn [Expr] Expr
+  | LetIn Expr Expr
   deriving (Show, Eq)
 
 data Def = Name String Expr deriving (Show, Eq)
@@ -36,9 +37,9 @@ data Code =
        , entrypoint  :: Expr }
 
 -- holds a set of free variables as a state
-type Closure = State [L.Expr]
+type Closure = State [F.Expr]
 
-update :: L.Expr -> Closure Int
+update :: F.Expr -> Closure Int
 update e = do
   fvs <- get
   case elemIndex e fvs of
@@ -48,57 +49,63 @@ update e = do
       return $ length fvs
 
 -- closure a body of lambda
-closureBody :: L.Expr -> Closure Expr
-closureBody (L.ParamBound 0) = return Parameter
-closureBody (L.ParamBound i) = flip NthOf Env <$> update (L.ParamBound $ i - 1)
-closureBody (L.GlobalBound s) = flip NthOf Env <$> update (L.GlobalBound s)
-closureBody (L.LetBound i) | N.lambdaIndex i == 0 = return $ LetBound i
-                           | otherwise            = flip NthOf Env <$> update (L.LetBound $ N.mapLambdaIndex pred i)
-closureBody (L.Lambda e) = do
-  t <- closureBody $ L.Tuple fvs
+closureBody :: F.Expr -> Closure Expr
+closureBody (F.ParamBound 0) = return Parameter
+closureBody (F.ParamBound i) = flip NthOf Env <$> update (F.ParamBound $ i - 1)
+closureBody (F.GlobalBound s) = flip NthOf Env <$> update (F.GlobalBound s)
+closureBody (F.LetBound i) | F.lambdaIndex i == 0 = return $ LetBound $ F.localIndex i
+                           | otherwise            = flip NthOf Env <$> update (F.LetBound $ decrLambdaIndex i)
+                           where
+                             decrLambdaIndex (F.LetIndex lam loc) = F.LetIndex (pred lam) loc
+closureBody (F.Lambda e) = do
+  t <- closureBody $ F.Tuple fvs
   return $ Tuple [Function body, t]
   where
     (body, fvs) = runState (closureBody e) []
-closureBody (L.Integer i) = return $ Integer i
-closureBody (L.Apply a b) = Apply <$> closureBody a <*> closureBody b
-closureBody (L.BinaryOp op a b) = BinaryOp op <$> closureBody a <*> closureBody b
-closureBody (L.SingleOp op x) = SingleOp op <$> closureBody x
-closureBody (L.Tuple xs) = Tuple <$> mapM closureBody xs
-closureBody (L.NthOf i x) = NthOf i <$> closureBody x
-closureBody (L.Ref x) = Ref <$> closureBody x
-closureBody (L.Assign a b) = Assign <$> closureBody a <*> closureBody b
-closureBody (L.Deref x) = Deref <$> closureBody x
-closureBody (L.If c t e) = If <$> closureBody c <*> closureBody t <*> closureBody e
-closureBody (L.LocalLet a b) = LocalLet <$> closureBody a <*> closureBody b
-closureBody L.LocalBound = return LocalBound
-closureBody (L.LetIn defs body) = LetIn <$> mapM closureBody defs <*> closureBody body
+closureBody (F.Integer i) = return $ Integer i
+closureBody (F.Apply a b) = Apply <$> closureBody a <*> closureBody b
+closureBody (F.BinaryOp op a b) = BinaryOp op <$> closureBody a <*> closureBody b
+closureBody (F.SingleOp op x) = SingleOp op <$> closureBody x
+closureBody (F.Tuple xs) = Tuple <$> mapM closureBody xs
+closureBody (F.NthOf i x) = NthOf i <$> closureBody x
+closureBody (F.Ref x) = Ref <$> closureBody x
+closureBody (F.Assign a b) = Assign <$> closureBody a <*> closureBody b
+closureBody (F.Seq a b) = Seq <$> closureBody a <*> closureBody b
+closureBody (F.Deref x) = Deref <$> closureBody x
+closureBody (F.If c t e) = If <$> closureBody c <*> closureBody t <*> closureBody e
+closureBody (F.LocalLet a b) = LocalLet <$> closureBody a <*> closureBody b
+closureBody F.Alloc = return Alloc
+closureBody F.LocalBound = return LocalBound
+closureBody (F.LetIn def body) = LetIn <$> closureBody def <*> closureBody body
 
 -- closure a top-level expression
-closureExpr :: L.Expr -> Expr
-closureExpr (L.ParamBound i) = error $ "Invalid occurrence of parameter " ++ show i
-closureExpr (L.LetBound i) | N.lambdaIndex i == 0 = LetBound i
+closureExpr :: F.Expr -> Expr
+closureExpr (F.ParamBound i) = error $ "Invalid occurrence of parameter " ++ show i
+closureExpr (F.LetBound i) | F.lambdaIndex i == 0 = LetBound $ F.localIndex i
                            | otherwise            = error $ "Invalid occurrence of variable " ++ show i
-closureExpr (L.GlobalBound s) = GlobalName s
-closureExpr (L.Lambda e) = Tuple [Function body, t]
+closureExpr (F.GlobalBound s) = GlobalName s
+closureExpr (F.Lambda e) = Tuple [Function body, t]
   where
-    t = closureExpr $ L.Tuple fvs
+    t = closureExpr $ F.Tuple fvs
     (body, fvs) = runState (closureBody e) []
-closureExpr (L.Integer i) = Integer i
-closureExpr (L.Apply a b) = Apply (closureExpr a) (closureExpr b)
-closureExpr (L.BinaryOp op a b) = BinaryOp op (closureExpr a) (closureExpr b)
-closureExpr (L.SingleOp op x) = SingleOp op $ closureExpr x
-closureExpr (L.Tuple xs) = Tuple $ map closureExpr xs
-closureExpr (L.NthOf i x) = NthOf i $ closureExpr x
-closureExpr (L.Ref x) = Ref $ closureExpr x
-closureExpr (L.Assign a b) = Assign (closureExpr a) (closureExpr b)
-closureExpr (L.Deref x) = Deref $ closureExpr x
-closureExpr (L.If c t e) = If (closureExpr c) (closureExpr t) (closureExpr e)
-closureExpr (L.LocalLet a b) = LocalLet (closureExpr a) (closureExpr b)
-closureExpr L.LocalBound = LocalBound
-closureExpr (L.LetIn defs body) = LetIn (map closureExpr defs) (closureExpr body)
+closureExpr (F.Integer i) = Integer i
+closureExpr (F.Apply a b) = Apply (closureExpr a) (closureExpr b)
+closureExpr (F.BinaryOp op a b) = BinaryOp op (closureExpr a) (closureExpr b)
+closureExpr (F.SingleOp op x) = SingleOp op $ closureExpr x
+closureExpr (F.Tuple xs) = Tuple $ map closureExpr xs
+closureExpr (F.NthOf i x) = NthOf i $ closureExpr x
+closureExpr (F.Ref x) = Ref $ closureExpr x
+closureExpr (F.Assign a b) = Assign (closureExpr a) (closureExpr b)
+closureExpr (F.Seq a b) = Seq (closureExpr a) (closureExpr b)
+closureExpr (F.Deref x) = Deref $ closureExpr x
+closureExpr (F.If c t e) = If (closureExpr c) (closureExpr t) (closureExpr e)
+closureExpr (F.LocalLet a b) = LocalLet (closureExpr a) (closureExpr b)
+closureExpr F.LocalBound = LocalBound
+closureExpr F.Alloc = Alloc
+closureExpr (F.LetIn def body) = LetIn (closureExpr def) (closureExpr body)
 
-closureDef :: L.Def -> Def
-closureDef (L.Name name body) = Name name $ closureExpr body
+closureDef :: F.Def -> Def
+closureDef (F.Name name body) = Name name $ closureExpr body
 
-closure :: L.Code -> Code
-closure (L.Code defs entry)= Code (map closureDef defs) (closureExpr entry)
+closure :: F.Code -> Code
+closure (F.Code defs entry)= Code (map closureDef defs) (closureExpr entry)
