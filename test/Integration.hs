@@ -49,4 +49,5 @@ spec = do
 
     it "ackermann" $ execBS $(embedFile "test/data/ack.fab") `shouldReturn` "125\n"
     it "factorial" $ execBS $(embedFile "test/data/factorial.fab") `shouldReturn` "120\n"
-    it "mutual recursion" $ execBS $(embedFile "test/data/multiple_names.fab") `shouldReturn` "1\n"
+    it "mutual recursion (1)" $ execBS $(embedFile "test/data/multiple_names.fab") `shouldReturn` "1\n"
+    it "mutual recursion (2)" $ execBS $(embedFile "test/data/multiple_names_let.fab") `shouldReturn` "1\n"
