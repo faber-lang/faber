@@ -78,11 +78,11 @@ replace (L.Deref x) = L.Deref <$> replace x
 replace (L.If c t e) = L.If <$> replace c <*> replace t <*> replace e
 replace (L.LocalLet a b) = L.LocalLet <$> replace a <*> replace b
 replace L.LocalBound = return L.LocalBound
-replace (L.LetBound i) = L.Deref . L.LetBound <$> asks (conv i)
+replace (L.LetBound i) = asks (conv i)
   where
     conv idx@(N.LetIndex lam _ loc inn) (ReplaceState lamI locI defc)
-                | lamI == lam && loc == locI = N.LetIndex lamI 0 (loc + inn + defc) 0
-                | otherwise = idx
+                | lamI == lam && loc == locI = L.Deref $ L.LetBound $ N.LetIndex lamI 0 (inn + defc) 0
+                | otherwise = L.LetBound idx
 
 runReplace :: L.Expr -> L.Expr
 runReplace x = runReader (replace x) initState
