@@ -44,7 +44,7 @@ liftVars (N.ParamBound i) = bool (N.ParamBound i) (N.ParamBound $ i + 1) <$> ask
     shouldLift (n, _) = i >= n
 liftVars (N.LetBound i) = bool (N.LetBound i) (N.LetBound $ N.mapLambdaIndex succ i) <$> asks (shouldLift i)
   where
-    shouldLift (N.LetIndex lam loc _  _) (n, m) = lam > n || (lam == n && loc >= m)
+    shouldLift (N.LetIndex lamI letI _  _) (n, m) = lamI > n || (lamI == n && letI >= m)
 liftVars (N.GlobalBound s)         = return $ N.GlobalBound s
 liftVars (N.Integer i)             = return $ N.Integer i
 liftVars (N.Lambda x)              = N.Lambda <$> local (first succ) (liftVars x)
