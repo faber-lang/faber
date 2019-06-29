@@ -141,7 +141,7 @@ genExpr (SingleOp op e) = apply_op =<< genExpr e
         Op.Negative -> IR.sub $ constInt 0
         Op.Positive -> return
 
-genExpr Alloc = callMalloc' $ constInt 8
+genExpr Alloc = callMalloc $ constInt 8
 genExpr (Ref e) = do
   e' <- genExpr e
   m <- callMalloc' $ constInt 8
