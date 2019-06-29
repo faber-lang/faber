@@ -52,7 +52,7 @@ liftVars (N.Apply a b)             = N.Apply <$> liftVars a <*> liftVars b
 liftVars (N.BinaryOp op a b)       = N.BinaryOp op <$> liftVars a <*> liftVars b
 liftVars (N.SingleOp op x)         = N.SingleOp op <$> liftVars x
 liftVars (N.Tuple xs)              = N.Tuple <$> mapM liftVars xs
-liftVars (N.LetIn ts defs body)    = N.LetIn ts <$> mapM liftVars defs <*> local (second succ) (liftVars body)
+liftVars (N.LetIn ts defs body)    = local (second succ) $ N.LetIn ts <$> mapM liftVars defs <*> liftVars body
 liftVars (N.If c t e)              = N.If <$> liftVars c <*> liftVars t <*> liftVars e
 
 makeEvaledThunk :: Expr -> Expr
