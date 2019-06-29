@@ -56,15 +56,20 @@ withNewLambda = local update
   where
     update (ReplaceState lamI _ _) = ReplaceState (succ lamI) 0 0
 
-withNewLet :: Int -> Replace a -> Replace a
-withNewLet n = local update
+withNewLet :: Replace a -> Replace a
+withNewLet = local update
   where
-    update (ReplaceState lamI letI locI) = ReplaceState lamI (succ letI) (locI + n)
+    update (ReplaceState lamI letI locI) = ReplaceState lamI (succ letI) locI
+
+withNewIn :: Int -> Replace a -> Replace a
+withNewIn n = local update
+  where
+    update (ReplaceState lamI letI locI) = ReplaceState lamI letI (locI + n)
 
 replace :: L.Expr -> Replace L.Expr
 replace (L.Integer i) = return $ L.Integer i
 replace (L.Lambda body) = withNewLambda $ L.Lambda <$> replace body
-replace (L.LetIn defs body) = withNewLet (length defs) $ L.LetIn <$> mapM replace defs <*> replace body
+replace (L.LetIn defs body) = withNewLet $ L.LetIn <$> mapM replace defs <*> withNewIn (length defs) (replace body)
 replace (L.Apply a b) = L.Apply <$> replace a <*> replace b
 replace (L.ParamBound i) = return $ L.ParamBound i
 replace (L.GlobalBound name) = return $ L.GlobalBound name
