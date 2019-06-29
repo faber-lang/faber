@@ -1,3 +1,4 @@
+name id :: forall a. a -> a
 name id x = x
 
 name v = const id id 1 + const 2 1
