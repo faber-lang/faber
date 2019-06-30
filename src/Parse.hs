@@ -15,6 +15,13 @@ import qualified Operators as Op
 -- syntax tree
 type Ident = String
 
+data Pattern
+  = PVar Ident
+  | PWildcard
+  | PInt Int
+  | PTuple [Pattern]
+  deriving (Show, Eq)
+
 data Expr
   = Integer Int
   | Lambda [Ident] Expr
@@ -25,6 +32,7 @@ data Expr
   | SingleOp Op.SingleOp Expr
   | LetIn [NameDef] Expr
   | If Expr Expr Expr
+  | Match Expr [(Pattern, Expr)]
   deriving (Show, Eq)
 
 data TypeExpr
