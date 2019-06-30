@@ -4,6 +4,7 @@ import Control.Monad.Reader
 import Data.Bool            (bool)
 import Data.Tuple.Extra     (first, second)
 
+import qualified Errors    as Err
 import qualified Nameless  as N
 import qualified Operators as Op
 
@@ -27,6 +28,7 @@ data Expr
   | LocalLet Expr Expr
   | LocalBound
   | LetIn [Expr] Expr
+  | Error Err.Error
   deriving (Show, Eq)
 
 data Def = Name String Expr deriving (Show, Eq)
@@ -45,7 +47,7 @@ liftVars b@(N.ParamBound i) = bool b (N.ParamBound $ i + 1) <$> asks shouldLift
 liftVars b@(N.LetBound i) = bool b (N.LetBound $ N.mapLambdaIndex succ i) <$> asks (shouldLift i)
   where
     shouldLift (N.LetIndex lamI letI _) (n, m) = lamI > n || (lamI == n && letI >= m)
-liftVars (N.GlobalBound s i)       = return $ (N.GlobalBound s $ i + 1)
+liftVars (N.GlobalBound s i)       = return $ N.GlobalBound s (i + 1)
 liftVars (N.Integer i)             = return $ N.Integer i
 liftVars (N.Lambda x)              = N.Lambda <$> local (first succ) (liftVars x)
 liftVars (N.Apply a b)             = N.Apply <$> liftVars a <*> liftVars b
@@ -54,6 +56,8 @@ liftVars (N.SingleOp op x)         = N.SingleOp op <$> liftVars x
 liftVars (N.Tuple xs)              = N.Tuple <$> mapM liftVars xs
 liftVars (N.LetIn ts defs body)    = local (second succ) $ N.LetIn ts <$> mapM liftVars defs <*> liftVars body
 liftVars (N.If c t e)              = N.If <$> liftVars c <*> liftVars t <*> liftVars e
+liftVars (N.NthOf n i e)           = N.NthOf n i <$> liftVars e
+liftVars (N.Error err)             = return $ N.Error err
 
 makeEvaledThunk :: Expr -> Expr
 makeEvaledThunk e = Ref $ Tuple [Integer 1, e]
@@ -82,7 +86,9 @@ isValue N.GlobalBound{} = False
 isValue N.BinaryOp{}    = False
 isValue N.SingleOp{}    = False
 isValue N.LetIn{}       = False
+isValue N.NthOf{}       = False
 isValue N.If{}          = False
+isValue N.Error{}       = False
 
 lazify :: N.Expr -> Expr
 lazify (N.ParamBound i)    = ParamBound i
@@ -103,6 +109,8 @@ lazyExpr (N.Tuple xs)          = Tuple $ map lazyExpr xs
 lazyExpr (N.Lambda body)       = Lambda $ lazyExpr body
 lazyExpr (N.LetIn _ defs body) = LetIn (map lazify defs) $ lazyExpr body
 lazyExpr (N.If c t e)          = If (lazyExpr c) (lazyExpr t) (lazyExpr e)
+lazyExpr (N.NthOf _ i e)       = NthOf i $ lazyExpr e
+lazyExpr (N.Error err)         = Error err
 
 lazyDef :: N.Def -> Def
 lazyDef (N.Name name body) = Name name $ lazify body

@@ -6,6 +6,7 @@ import qualified Desugar  as Fab
 import qualified Flatten  as Fab
 import qualified Hoist    as Fab
 import qualified Lazy     as Fab
+import qualified Match    as Fab
 import qualified Nameless as Fab
 import qualified Parse    as Fab
 import qualified Typing   as Fab
@@ -29,7 +30,7 @@ compileToModule filename source = do
   ()  <- mapLeft TypeError $ Fab.typing ir
   return $ conv2 ir
   where
-    conv1 = Fab.nameless . Fab.desugar
+    conv1 = Fab.nameless . Fab.convertMatch . Fab.desugar
     conv2 = Fab.codegen . Fab.hoist . Fab.closure . Fab.flatten . Fab.lazy
 
 moduleToLLVMAssembly :: LLVMAST.Module -> IO ByteString

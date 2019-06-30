@@ -1,9 +1,7 @@
 name ack m n =
-  if m == 0
-  then n + 1
-  else
-    if n == 0
-    then ack (m - 1) 1
-    else ack (m - 1) (ack m (n - 1))
+  match (m, n) with
+  | (0, n) -> n + 1
+  | (m, 0) -> ack (m - 1) 1
+  | (m, n) -> ack (m - 1) (ack m (n - 1))
 
 name main = ack 3 4

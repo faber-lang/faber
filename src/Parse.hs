@@ -15,6 +15,13 @@ import qualified Operators as Op
 -- syntax tree
 type Ident = String
 
+data Pattern
+  = PVar Ident
+  | PWildcard
+  | PInt Int
+  | PTuple [Pattern]
+  deriving (Show, Eq)
+
 data Expr
   = Integer Int
   | Lambda [Ident] Expr
@@ -25,6 +32,7 @@ data Expr
   | SingleOp Op.SingleOp Expr
   | LetIn [NameDef] Expr
   | If Expr Expr Expr
+  | Match Expr [(Pattern, Expr)]
   deriving (Show, Eq)
 
 data TypeExpr
@@ -93,9 +101,26 @@ identifier' rws = (lexeme . try) (p >>= check)
     check x | x `elem` rws = fail $ "attempt to parse " ++ show x ++ "as an identifier"
             | otherwise    = return x
 
+-- pattern parser
+patIdentifier :: Parser Ident
+patIdentifier = identifier' []
+
+patWildcard :: Parser Pattern
+patWildcard = symbol "_" >> return PWildcard
+
+patTuple :: Parser Pattern
+patTuple = PTuple <$> parens (pattern_ `sepEndBy` symbol ",")
+
+pattern_ :: Parser Pattern
+pattern_ = try (parens pattern_)
+  <|> patTuple
+  <|> patWildcard
+  <|> PVar <$> patIdentifier
+  <|> PInt <$> integer
+
 -- expression parser
 exprRws :: [String]
-exprRws = ["let", "in", "where", "if", "then", "else"]
+exprRws = ["let", "in", "where", "if", "then", "else", "match", "with"]
 
 identifier :: Parser Ident
 identifier = identifier' exprRws
@@ -126,6 +151,20 @@ ifThenElse = do
   rword "else"
   If cond then_ <$> expr
 
+match_ :: Parser Expr
+match_ = do
+  rword "match"
+  target <- expr
+  rword "with"
+  _ <- optional $ symbol "|"
+  Match target <$> arm `sepBy1` symbol "|"
+  where
+    arm = do
+      pat <- pattern_
+      symbol "->"
+      body <- expr
+      return (pat, body)
+
 operators :: [[Operator Parser Expr]]
 operators =
   [ [ InfixL (Apply <$ symbol "") ],
@@ -141,6 +180,7 @@ term = try (parens expr)
   <|> tuple
   <|> letIn
   <|> ifThenElse
+  <|> match_
   <|> lambda
   <|> Variable <$> identifier
   <|> Integer <$> integer

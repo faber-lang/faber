@@ -2,6 +2,7 @@ module Hoist where
 
 import qualified Closure             as C
 import           Control.Monad.State
+import qualified Errors              as Err
 import qualified Operators           as Op
 import           Utils
 
@@ -28,6 +29,7 @@ data Expr
   | Deref Expr
   | If Expr Expr Expr
   | LetIn Expr Expr
+  | Error Err.Error
   deriving (Show, Eq)
 
 data Def = Name String Expr deriving (Show, Eq)
@@ -75,6 +77,7 @@ hoistExpr (C.If c t e)        = If <$> hoistExpr c <*> hoistExpr t <*> hoistExpr
 hoistExpr (C.LocalLet a b)    = LocalLet <$> hoistExpr a <*> hoistExpr b
 hoistExpr C.LocalBound        = return LocalBound
 hoistExpr C.Alloc             = return Alloc
+hoistExpr (C.Error err)       = return $ Error err
 hoistExpr (C.LetIn def body)  = LetIn <$> hoistExpr def <*> hoistExpr body
 
 hoistDef :: C.Def -> Hoist Def
