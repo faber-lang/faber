@@ -28,17 +28,21 @@ newtype Def = Name NameDef deriving (Show, Eq)
 
 type Code = [Def]
 
-convertPattern :: Expr -> Expr -> Pattern -> Expr -> Expr
-convertPattern fallback target pat expr = case pat of
-  -- `s` must be fresh in rhs of LetIn and NameDef
-  PVar s    -> localLet target $ LetIn [NameDef s localBound] expr
+convertPattern :: Int -> Expr -> Expr -> Pattern -> Expr -> Expr
+convertPattern d fallback target pat expr = localLet target $ case pat of
+  -- `s` must be fresh in rhs of NameDef
+  PVar s    -> LetIn [NameDef s target'] expr
   PWildcard -> expr
-  PInt i    -> If (BinaryOp Op.Eq target $ Integer i) expr fallback
-  PTuple ps -> localLet target $ foldr (folder $ length ps) expr (zip ps [0..])
+  PInt i    -> If (BinaryOp Op.Eq target' $ Integer i) expr fallback
+  PTuple ps -> foldr (folder $ length ps) expr (zip ps [0..])
   where
-    folder len (x, idx) = convertPattern fallback (NthOf len idx localBound) x
-    localLet a = LetIn [NameDef "__" a]
-    localBound = Variable "__"
+    folder len (x, idx) = convertPattern (d+1) fallback (NthOf len idx target') x
+    bName = "_match" ++ show d
+    localLet a = LetIn [NameDef bName a]
+    target' = Variable bName
+
+runConvertPattern :: Expr -> Expr -> Pattern -> Expr -> Expr
+runConvertPattern = convertPattern 0
 
 convertExpr :: D.Expr -> Expr
 convertExpr (D.Apply fn arg) = Apply (convertExpr fn) (convertExpr arg)
@@ -55,7 +59,7 @@ convertExpr (D.Tuple xs) = Tuple $ map convertExpr xs
 convertExpr (D.If c t e) = If (convertExpr c) (convertExpr t) (convertExpr e)
 convertExpr (D.Match target arms) = matcher (convertExpr target) arms
   where
-    matcher t ((p, e):xs) = convertPattern (matcher t xs) t p (convertExpr e)
+    matcher t ((p, e):xs) = runConvertPattern (matcher t xs) t p (convertExpr e)
     matcher _ []          = Error Err.MatchFail
 
 convertDef :: D.Def -> Def
