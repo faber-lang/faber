@@ -271,6 +271,12 @@ inferExpr (N.If c t e) = do
   s4 <- unify t1 Integer   -- TODO: Bool
   s5 <- unify t2 t3
   return (s1 `compose` s2 `compose` s3 `compose` s4 `compose` s5, apply s5 t2)
+inferExpr (N.NthOf n i e) = do
+  ts <- replicateM n freshFree
+  (s1, t2) <- inferExpr e
+  s2 <- unify (Tuple ts) t2
+  return (s1 `compose` s2, apply s2 $ ts !! i)
+inferExpr (N.Error _) = (,) nullSubst <$> freshFree
 
 inferDefs :: Map.Map String Scheme -> [N.Def] -> Infer ()
 inferDefs sig defs = do
