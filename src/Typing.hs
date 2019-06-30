@@ -6,7 +6,7 @@ import           Control.Monad.Reader
 import           Control.Monad.State
 import           Data.Foldable
 import qualified Data.Map             as Map
-import           Data.Maybe           (fromMaybe, mapMaybe)
+import           Data.Maybe           (fromMaybe)
 import qualified Data.Set             as Set
 import           Data.Tuple.Extra
 
@@ -276,18 +276,18 @@ inferDefs :: Map.Map String Scheme -> [N.Def] -> Infer ()
 inferDefs sig defs = do
   filledSig <- Map.fromList <$> mapM mapper names
   (s, tys) <- foldr (collectNames filledSig) (pushLevel $ inferExprs bodies) names
-  zipWithM_ zipper names tys
+  zipWithM_ zipper names (apply s tys)
   where
     extract (N.Name name body) = (name, body)
     (names, bodies) = mapAndUnzip extract defs
-    collectNames sig name acc = withGlobal name (sig Map.! name) acc
+    collectNames s name = withGlobal name (s Map.! name)
     mapper name = (,) name <$> fromMaybeM (Forall [] <$> freshFree) (return $ Map.lookup name sig)
     zipper name ty = case Map.lookup name sig of
       -- there is no need to use the resulting subst of `unifyAnnot`
       -- because the resulting type is surely `annot`,
       -- and all we need to do here is to check that `t` is compatible with `annot`
-      Just s@(Forall _ annot) -> void $ unifyAnnot annot ty
-      Nothing                 -> return ()
+      Just (Forall _ annot) -> void $ unifyAnnot annot ty
+      Nothing               -> return ()
 
 
 inferCode :: N.Code -> Infer ()
