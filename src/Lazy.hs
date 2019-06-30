@@ -15,7 +15,7 @@ data Expr
   | Apply Expr Expr
   | ParamBound Int
   | LetBound N.LetIndex
-  | GlobalBound String
+  | GlobalBound String Int
   | BinaryOp Op.BinaryOp Expr Expr
   | SingleOp Op.SingleOp Expr
   | Tuple [Expr]
@@ -39,13 +39,13 @@ data Code =
 type Lift = Reader (Int, Int)
 
 liftVars :: N.Expr -> Lift N.Expr
-liftVars (N.ParamBound i) = bool (N.ParamBound i) (N.ParamBound $ i + 1) <$> asks shouldLift
+liftVars b@(N.ParamBound i) = bool b (N.ParamBound $ i + 1) <$> asks shouldLift
   where
     shouldLift (n, _) = i >= n
-liftVars (N.LetBound i) = bool (N.LetBound i) (N.LetBound $ N.mapLambdaIndex succ i) <$> asks (shouldLift i)
+liftVars b@(N.LetBound i) = bool b (N.LetBound $ N.mapLambdaIndex succ i) <$> asks (shouldLift i)
   where
     shouldLift (N.LetIndex lamI letI _) (n, m) = lamI > n || (lamI == n && letI >= m)
-liftVars (N.GlobalBound s)         = return $ N.GlobalBound s
+liftVars (N.GlobalBound s i)       = return $ (N.GlobalBound s $ i + 1)
 liftVars (N.Integer i)             = return $ N.Integer i
 liftVars (N.Lambda x)              = N.Lambda <$> local (first succ) (liftVars x)
 liftVars (N.Apply a b)             = N.Apply <$> liftVars a <*> liftVars b
@@ -85,17 +85,17 @@ isValue N.LetIn{}       = False
 isValue N.If{}          = False
 
 lazify :: N.Expr -> Expr
-lazify (N.ParamBound i)  = ParamBound i
-lazify (N.GlobalBound s) = GlobalBound s
-lazify (N.LetBound i)    = LetBound i
-lazify x | isValue x     = makeEvaledThunk $ lazyExpr x
-         | otherwise     = makeThunk x
+lazify (N.ParamBound i)    = ParamBound i
+lazify (N.GlobalBound s i) = GlobalBound s i
+lazify (N.LetBound i)      = LetBound i
+lazify x | isValue x       = makeEvaledThunk $ lazyExpr x
+         | otherwise       = makeThunk x
 
 lazyExpr :: N.Expr -> Expr
 lazyExpr (N.Apply a b)         = Apply (lazyExpr a) (lazify b)
 lazyExpr (N.ParamBound i)      = evalThunk (ParamBound i)
 lazyExpr (N.LetBound i)        = evalThunk (LetBound i)
-lazyExpr (N.GlobalBound s)     = evalThunk (GlobalBound s)
+lazyExpr (N.GlobalBound s i)   = evalThunk (GlobalBound s i)
 lazyExpr (N.Integer i)         = Integer i
 lazyExpr (N.BinaryOp op a b)   = BinaryOp op (lazyExpr a) (lazyExpr b)
 lazyExpr (N.SingleOp op x)     = SingleOp op (lazyExpr x)
@@ -111,4 +111,4 @@ lazy :: N.Code -> Code
 lazy (N.Code _ code) = Code defs entry
   where
     defs = map lazyDef code
-    entry = evalThunk (GlobalBound "main")
+    entry = evalThunk (GlobalBound "main" 0)

@@ -27,7 +27,7 @@ data Expr
   | Apply Expr Expr
   | ParamBound Int
   | LetBound LetIndex
-  | GlobalBound String
+  | GlobalBound String Int
   | BinaryOp Op.BinaryOp Expr Expr
   | SingleOp Op.SingleOp Expr
   | Tuple [Expr]
@@ -70,7 +70,7 @@ type Finder = Reader FindState
 findInEnv :: Env -> String -> Finder Expr
 findInEnv (Param x:xs) s  | x == s    = asks $ ParamBound . stLambdaIndex
                           | otherwise = withNewLambda $ findInEnv xs s
-findInEnv (Global x:xs) s | x == s    = return $ GlobalBound s
+findInEnv (Global x:xs) s | x == s    = asks $ GlobalBound s . stLambdaIndex
                           | otherwise = findInEnv xs s
 findInEnv (Let bs:xs) s =
   case s `elemIndex` bs of

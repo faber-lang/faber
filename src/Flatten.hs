@@ -19,7 +19,7 @@ data Expr
   | Apply Expr Expr
   | ParamBound Int
   | LetBound LetIndex
-  | GlobalBound String
+  | GlobalBound String Int
   | BinaryOp Op.BinaryOp Expr Expr
   | SingleOp Op.SingleOp Expr
   | Tuple [Expr]
@@ -67,7 +67,7 @@ replace (L.Lambda body) = withNewLambda $ L.Lambda <$> replace body
 replace (L.LetIn defs body) = withNewLet (length defs) $ L.LetIn <$> mapM replace defs <*> replace body
 replace (L.Apply a b) = L.Apply <$> replace a <*> replace b
 replace (L.ParamBound i) = return $ L.ParamBound i
-replace (L.GlobalBound name) = return $ L.GlobalBound name
+replace (L.GlobalBound name i) = return $ L.GlobalBound name i
 replace (L.BinaryOp op a b) = L.BinaryOp op <$> replace a <*> replace b
 replace (L.SingleOp op x) = L.SingleOp op <$> replace x
 replace (L.Tuple xs) = L.Tuple <$> mapM replace xs
@@ -93,7 +93,7 @@ flattenExpr (L.Lambda body) = Lambda $ flattenExpr body
 flattenExpr (L.Apply a b) = Apply (flattenExpr a) (flattenExpr b)
 flattenExpr (L.ParamBound i) = ParamBound i
 flattenExpr (L.LetBound (N.LetIndex lam let_ inn)) = assert (inn == 0) $ LetBound $ LetIndex lam let_
-flattenExpr (L.GlobalBound name) = GlobalBound name
+flattenExpr (L.GlobalBound name i) = GlobalBound name i
 flattenExpr (L.BinaryOp op a b) = BinaryOp op (flattenExpr a) (flattenExpr b)
 flattenExpr (L.SingleOp op x) = SingleOp op $ flattenExpr x
 flattenExpr (L.Tuple xs) = Tuple $ map flattenExpr xs
@@ -118,7 +118,7 @@ replaceGlobal (L.Lambda body) = L.Lambda $ replaceGlobal body
 replaceGlobal (L.Apply a b) = L.Apply (replaceGlobal a) (replaceGlobal b)
 replaceGlobal (L.ParamBound i) = L.ParamBound i
 replaceGlobal (L.LetBound i) = L.LetBound i
-replaceGlobal (L.GlobalBound name) = L.Deref $ L.GlobalBound name
+replaceGlobal (L.GlobalBound name i) = L.Deref $ L.GlobalBound name i
 replaceGlobal (L.BinaryOp op a b) = L.BinaryOp op (replaceGlobal a) (replaceGlobal b)
 replaceGlobal (L.SingleOp op x) = L.SingleOp op $ replaceGlobal x
 replaceGlobal (L.Tuple xs) = L.Tuple $ map replaceGlobal xs
@@ -135,6 +135,6 @@ flatten :: L.Code -> Code
 flatten (L.Code defs entry) = Code defs' entry'
   where
     fillAlloc (L.Name name _) = Name name Alloc
-    folder (L.Name k v) = Seq (Assign (GlobalBound k) (flattenExpr (replaceGlobal v)))
+    folder (L.Name k v) = Seq (Assign (GlobalBound k 0) (flattenExpr (replaceGlobal v)))
     defs' = map fillAlloc defs
     entry' = foldr folder (flattenExpr (replaceGlobal entry)) defs

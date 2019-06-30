@@ -218,7 +218,7 @@ inferExprs = foldrM f (nullSubst, [])
 
 inferExpr :: N.Expr -> Infer (Subst, Type)
 inferExpr (N.ParamBound i) = (,) nullSubst <$> findParam i
-inferExpr (N.GlobalBound name) = (,) nullSubst <$> (instantiate =<< findGlobal name)
+inferExpr (N.GlobalBound name _) = (,) nullSubst <$> (instantiate =<< findGlobal name)
 inferExpr (N.LetBound i) = (,) nullSubst <$> (instantiate =<< findLocal i)
 inferExpr (N.Integer _) = return (nullSubst, Integer)
 inferExpr (N.Lambda body) = do

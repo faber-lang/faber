@@ -1,5 +1,6 @@
 module Closure where
 
+import Control.Exception   (assert)
 import Control.Monad.State
 import Data.List
 
@@ -52,7 +53,8 @@ update e = do
 closureBody :: F.Expr -> Closure Expr
 closureBody (F.ParamBound 0) = return Parameter
 closureBody (F.ParamBound i) = flip NthOf Env <$> update (F.ParamBound $ i - 1)
-closureBody (F.GlobalBound s) = flip NthOf Env <$> update (F.GlobalBound s)
+closureBody (F.GlobalBound s 0) = return $ GlobalName s
+closureBody (F.GlobalBound s i) = flip NthOf Env <$> update (F.GlobalBound s $ i - 1)
 closureBody (F.LetBound i) | F.lambdaIndex i == 0 = return $ LetBound $ F.letIndex i
                            | otherwise            = flip NthOf Env <$> update (F.LetBound $ decrLambdaIndex i)
                            where
@@ -80,29 +82,9 @@ closureBody (F.LetIn def body) = LetIn <$> closureBody def <*> closureBody body
 
 -- closure a top-level expression
 closureExpr :: F.Expr -> Expr
-closureExpr (F.ParamBound i) = error $ "Invalid occurrence of parameter " ++ show i
-closureExpr (F.LetBound i) | F.lambdaIndex i == 0 = LetBound $ F.letIndex i
-                           | otherwise            = error $ "Invalid occurrence of variable " ++ show i
-closureExpr (F.GlobalBound s) = GlobalName s
-closureExpr (F.Lambda e) = Tuple [Function body, t]
+closureExpr e = check $ runState (closureBody e) []
   where
-    t = closureExpr $ F.Tuple fvs
-    (body, fvs) = runState (closureBody e) []
-closureExpr (F.Integer i) = Integer i
-closureExpr (F.Apply a b) = Apply (closureExpr a) (closureExpr b)
-closureExpr (F.BinaryOp op a b) = BinaryOp op (closureExpr a) (closureExpr b)
-closureExpr (F.SingleOp op x) = SingleOp op $ closureExpr x
-closureExpr (F.Tuple xs) = Tuple $ map closureExpr xs
-closureExpr (F.NthOf i x) = NthOf i $ closureExpr x
-closureExpr (F.Ref x) = Ref $ closureExpr x
-closureExpr (F.Assign a b) = Assign (closureExpr a) (closureExpr b)
-closureExpr (F.Seq a b) = Seq (closureExpr a) (closureExpr b)
-closureExpr (F.Deref x) = Deref $ closureExpr x
-closureExpr (F.If c t e) = If (closureExpr c) (closureExpr t) (closureExpr e)
-closureExpr (F.LocalLet a b) = LocalLet (closureExpr a) (closureExpr b)
-closureExpr F.LocalBound = LocalBound
-closureExpr F.Alloc = Alloc
-closureExpr (F.LetIn def body) = LetIn (closureExpr def) (closureExpr body)
+    check (e', fvs) = assert (null fvs) e'
 
 closureDef :: F.Def -> Def
 closureDef (F.Name name body) = Name name $ closureExpr body

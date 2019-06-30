@@ -23,7 +23,7 @@ spec = do
 
   describe "global names" $ do
     it "convert global name reference" $ do
-      N.nameless [D.Name (D.NameDef "a" $ D.Integer 1), D.Name (D.NameDef "main" $ D.Variable "a")] `shouldBe` N.Code Map.empty [N.Name "a" $ N.Integer 1, N.Name "main" $ N.GlobalBound "a"]
+      N.nameless [D.Name (D.NameDef "a" $ D.Integer 1), D.Name (D.NameDef "main" $ D.Variable "a")] `shouldBe` N.Code Map.empty [N.Name "a" $ N.Integer 1, N.Name "main" $ N.GlobalBound "a" 0]
 
   describe "complex examples" $ do
     it "complex example 1" $ do

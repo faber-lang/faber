@@ -32,7 +32,7 @@ spec = do
               ])
 
     it "convert lambdas with reference to the global name" $ do
-      closureExpr (F.Apply (F.GlobalBound "f") (F.Lambda $ F.GlobalBound "g")) `shouldBe` Apply (GlobalName "f") (Tuple [Function $ NthOf 0 Env, Tuple [GlobalName "g"]])
+      closureExpr (F.Apply (F.GlobalBound "f" 0) (F.Lambda $ F.GlobalBound "g" 1)) `shouldBe` Apply (GlobalName "f") (Tuple [Function $ NthOf 0 Env, Tuple [GlobalName "g"]])
 
     it "convert lambdas with multiple occured parameter" $ do
       -- \. 0 0
