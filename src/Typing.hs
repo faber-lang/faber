@@ -1,11 +1,12 @@
 module Typing where
 
 import           Control.Monad.Except
+import           Control.Monad.Extra  (fromMaybeM, maybeM)
 import           Control.Monad.Reader
 import           Control.Monad.State
 import           Data.Foldable
 import qualified Data.Map             as Map
-import           Data.Maybe           (fromMaybe, mapMaybe)
+import           Data.Maybe           (fromMaybe)
 import qualified Data.Set             as Set
 import           Data.Tuple.Extra
 
@@ -121,8 +122,8 @@ findParam i = do
   (env, _) <- ask
   return $ lookupParam env i
 
-findLocal :: LetIndex -> Infer Scheme
-findLocal (LetIndex _ _ local inner) = do
+findLocal :: N.LetIndex -> Infer Scheme
+findLocal (N.LetIndex _ local inner) = do
   (env, _) <- ask
   return $ lookupLocal env local inner
 
@@ -231,14 +232,16 @@ inferExpr (N.Apply a b) = do
     s3 <- unify (apply s2 a_ty) (Function b_ty tv)
     return (s3 `compose` s2 `compose` s1, apply s3 tv)
 inferExpr (N.LetIn annots defs body) = do
-    (s1, tys) <- pushLevel $ inferExprs defs
-    schemes <- zipWithM zipper tys annots
+    tys <- mapM mapper annots
+    (s1, iTys) <- withLocals tys $ pushLevel $ inferExprs defs
+    schemes <- zipWithM zipper iTys annots
     (s2, ty) <-
       withSubst s1 $
         withLocals schemes $
           inferExpr body
     return (s1 `compose` s2, ty)
   where
+    mapper annot = maybeM (Forall [] <$> freshFree) translateScheme $ return annot
     zipper t = maybe (generalize t) (go t)
     go t1 annot = do
       scheme <- translateScheme annot
@@ -270,16 +273,22 @@ inferExpr (N.If c t e) = do
   return (s1 `compose` s2 `compose` s3 `compose` s4 `compose` s5, apply s5 t2)
 
 inferDefs :: Map.Map String Scheme -> [N.Def] -> Infer ()
-inferDefs sig (N.Name name body:xs) = do
-  (s1, t) <- pushLevel $ inferExpr body
-  scheme <- case Map.lookup name sig of
-    -- there is no need to use the resulting subst of `unifyAnnot`
-    -- because the resulting type is surely `annot`,
-    -- and all we need to do here is to check that `t` is compatible with `annot`
-    Just s@(Forall _ annot) -> unifyAnnot annot t >> return s
-    Nothing                 -> generalize t
-  withGlobal name scheme $ withSubst s1 $ inferDefs sig xs
-inferDefs _ [] = return ()
+inferDefs sig defs = do
+  filledSig <- Map.fromList <$> mapM mapper names
+  (s, tys) <- foldr (collectNames filledSig) (pushLevel $ inferExprs bodies) names
+  zipWithM_ zipper names (apply s tys)
+  where
+    extract (N.Name name body) = (name, body)
+    (names, bodies) = mapAndUnzip extract defs
+    collectNames s name = withGlobal name (s Map.! name)
+    mapper name = (,) name <$> fromMaybeM (Forall [] <$> freshFree) (return $ Map.lookup name sig)
+    zipper name ty = case Map.lookup name sig of
+      -- there is no need to use the resulting subst of `unifyAnnot`
+      -- because the resulting type is surely `annot`,
+      -- and all we need to do here is to check that `t` is compatible with `annot`
+      Just (Forall _ annot) -> void $ unifyAnnot annot ty
+      Nothing               -> return ()
+
 
 inferCode :: N.Code -> Infer ()
 inferCode (N.Code sig defs) = flip inferDefs defs =<< mapMapM translateScheme sig

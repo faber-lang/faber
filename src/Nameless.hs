@@ -1,5 +1,6 @@
 module Nameless where
 
+import           Control.Monad.Extra  (mapMaybeM)
 import           Control.Monad.Reader
 import           Control.Monad.State
 import           Data.Foldable        (foldrM)
@@ -10,6 +11,15 @@ import qualified Desugar   as D
 import qualified Operators as Op
 import           Parse     (TypeScheme)
 import           Utils
+
+data LetIndex =
+  LetIndex { lambdaIndex :: Int
+           , letIndex    :: Int
+           , innerIndex  :: Int }
+  deriving (Show, Eq)
+
+mapLambdaIndex :: (Int -> Int) -> LetIndex -> LetIndex
+mapLambdaIndex f (LetIndex lamI letI innI) = LetIndex (f lamI) letI innI
 
 data Expr
   = Integer Int
@@ -43,19 +53,18 @@ withBinding new = local (new:)
 
 data FindState =
   FindState { stLambdaIndex :: Int
-            , stLocalIndex  :: Int
             , stLetIndex    :: Int }
 initState :: FindState
-initState = FindState 0 0 0
+initState = FindState 0 0
 withNewLambda :: Finder a -> Finder a
 withNewLambda = local update
   where
     -- reset localI in new lambda
-    update (FindState lamI _ letI) = FindState (succ lamI) 0 letI
+    update (FindState lamI letI) = FindState (succ lamI) letI
 withNewLet :: Finder a -> Finder a
 withNewLet = local update
   where
-    update (FindState lamI localI letI) = FindState lamI (succ localI) (succ letI)
+    update (FindState lamI letI) = FindState lamI (succ letI)
 
 type Finder = Reader FindState
 findInEnv :: Env -> String -> Finder Expr
@@ -67,7 +76,7 @@ findInEnv (Let bs:xs) s =
   case s `elemIndex` bs of
     Just i -> do
       st <- ask
-      return $ LetBound $ LetIndex (stLambdaIndex st) (stLocalIndex st) (stLetIndex st) i
+      return $ LetBound $ LetIndex (stLambdaIndex st) (stLetIndex st) i
     Nothing -> withNewLet $ findInEnv xs s
 findInEnv [] s = error $ "Unbound variable " ++ s
 
@@ -89,7 +98,7 @@ destructDefs defs = runState (foldrM f ([], []) defs) Map.empty
 namelessExpr :: D.Expr -> Nameless Expr
 namelessExpr (D.Apply fn arg) = Apply <$> namelessExpr fn <*> namelessExpr arg
 namelessExpr (D.Lambda p body) = Lambda <$> withBinding (Param p) (namelessExpr body)
-namelessExpr (D.LetIn defs body) = LetIn schemes <$> bodies' <*> withBinding (Let names) (namelessExpr body)
+namelessExpr (D.LetIn defs body) = withBinding (Let names) $ LetIn schemes <$> bodies' <*> namelessExpr body
   where
     ((names, bodies), sig) = destructDefs defs
     bodies' = mapM namelessExpr bodies
@@ -101,15 +110,19 @@ namelessExpr (D.SingleOp op x) = SingleOp op <$> namelessExpr x
 namelessExpr (D.Tuple xs) = Tuple <$> mapM namelessExpr xs
 namelessExpr (D.If c t e) = If <$> namelessExpr c <*> namelessExpr t <*> namelessExpr e
 
+namelessNameDef :: D.Def -> Nameless (Maybe Def)
+namelessNameDef (D.Name (D.NameDef name expr)) = Just . Name name <$> namelessExpr expr
+namelessNameDef _ = return Nothing
+
 namelessDefs :: [D.Def] -> Nameless Code
-namelessDefs (D.Name (D.NameDef name body):xs) = do
-  def <- Name name <$> namelessExpr body
-  Code annot xs' <- withBinding (Global name) (namelessDefs xs)
-  return $ Code annot $ def : xs'
-namelessDefs (D.Name (D.TypeAnnot name scheme):xs) = do
-  Code annot xs' <- namelessDefs xs
-  return $ Code (Map.insert name scheme annot) xs'
-namelessDefs [] = return $ Code Map.empty []
+namelessDefs defs = Code annots <$> foldr collectNames body defs
+  where
+    body = mapMaybeM namelessNameDef defs
+    annots = foldr collectAnnots Map.empty defs
+    collectNames (D.Name (D.NameDef name _)) acc = withBinding (Global name) acc
+    collectNames (D.Name (D.TypeAnnot _ _)) acc  = acc
+    collectAnnots (D.Name (D.NameDef _ _))           = id
+    collectAnnots (D.Name (D.TypeAnnot name scheme)) = Map.insert name scheme
 
 namelessCode :: D.Code -> Nameless Code
 namelessCode = namelessDefs

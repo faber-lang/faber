@@ -14,7 +14,7 @@ data Expr
   | Lambda Expr
   | Apply Expr Expr
   | ParamBound Int
-  | LetBound LetIndex
+  | LetBound N.LetIndex
   | GlobalBound String
   | BinaryOp Op.BinaryOp Expr Expr
   | SingleOp Op.SingleOp Expr
@@ -42,9 +42,9 @@ liftVars :: N.Expr -> Lift N.Expr
 liftVars (N.ParamBound i) = bool (N.ParamBound i) (N.ParamBound $ i + 1) <$> asks shouldLift
   where
     shouldLift (n, _) = i >= n
-liftVars (N.LetBound i) = bool (N.LetBound i) (N.LetBound $ mapLambdaIndex succ i) <$> asks (shouldLift i)
+liftVars (N.LetBound i) = bool (N.LetBound i) (N.LetBound $ N.mapLambdaIndex succ i) <$> asks (shouldLift i)
   where
-    shouldLift (LetIndex lam loc _  _) (n, m) = lam > n || (lam == n && loc >= m)
+    shouldLift (N.LetIndex lamI letI _) (n, m) = lamI > n || (lamI == n && letI >= m)
 liftVars (N.GlobalBound s)         = return $ N.GlobalBound s
 liftVars (N.Integer i)             = return $ N.Integer i
 liftVars (N.Lambda x)              = N.Lambda <$> local (first succ) (liftVars x)
@@ -52,7 +52,7 @@ liftVars (N.Apply a b)             = N.Apply <$> liftVars a <*> liftVars b
 liftVars (N.BinaryOp op a b)       = N.BinaryOp op <$> liftVars a <*> liftVars b
 liftVars (N.SingleOp op x)         = N.SingleOp op <$> liftVars x
 liftVars (N.Tuple xs)              = N.Tuple <$> mapM liftVars xs
-liftVars (N.LetIn ts defs body)    = N.LetIn ts <$> mapM liftVars defs <*> local (second succ) (liftVars body)
+liftVars (N.LetIn ts defs body)    = local (second succ) $ N.LetIn ts <$> mapM liftVars defs <*> liftVars body
 liftVars (N.If c t e)              = N.If <$> liftVars c <*> liftVars t <*> liftVars e
 
 makeEvaledThunk :: Expr -> Expr

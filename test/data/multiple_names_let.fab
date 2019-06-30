@@ -1,0 +1,22 @@
+name main =
+  let
+  - isEven n =
+    if n == 0
+    then 1
+    else isOdd (n - 1)
+  - isOdd n =
+    if n == 0
+    then 0
+    else isEven (n - 1)
+  in
+  let
+  - f i x =
+      if x == (isEven 3)
+      then i
+      else g (i + 1) (x - 1)
+  - g i x =
+      if x == (isOdd 2)
+      then i
+      else f (i + 1) (x - 1)
+  in
+  isEven (f 0 10)

@@ -10,12 +10,15 @@ mapMapM f = Map.foldrWithKey folder (return Map.empty)
   where
     folder k v acc = Map.insert k <$> f v <*> acc
 
-data LetIndex =
-  LetIndex { lambdaIndex :: Int
-           , localIndex  :: Int
-           , letIndex    :: Int
-           , innerIndex  :: Int }
-  deriving (Show, Eq)
+mapAndUnzip :: (a -> (b, c)) -> [a] -> ([b], [c])
+mapAndUnzip f (x:xs) = (a:as, b:bs)
+  where
+    (a, b)   = f x
+    (as, bs) = mapAndUnzip f xs
+mapAndUnzip _ [] = ([], [])
 
-mapLambdaIndex :: (Int -> Int) -> LetIndex -> LetIndex
-mapLambdaIndex f (LetIndex lamI locI letI innI) = LetIndex (f lamI) locI letI innI
+foldrN :: (Num i, Enum i) => (a -> a) -> a -> i -> a
+foldrN f x n = foldr (const f) x [0..(n - 1)]
+
+imap :: (Num i, Enum i) => (i -> a -> b) -> [a] -> [b]
+imap f = zipWith f [0..]
