@@ -54,3 +54,12 @@ convertExpr (D.Match target arms) = matcher (convertExpr target) arms
     matcher t ((p, e):xs) = convertPattern (matcher t xs) t p (convertExpr e)
     matcher _ []          = MatchFail
 
+convertDef :: D.Def -> Def
+convertDef (D.Name (D.NameDef name expr)) = Name (NameDef name $ convertExpr expr)
+convertDef (D.Name (D.TypeAnnot name scheme)) = Name (TypeAnnot name scheme)
+
+convertCode :: D.Code -> Code
+convertCode = map convertDef
+
+convertMatch :: D.Code -> Code
+convertMatch = convertCode
