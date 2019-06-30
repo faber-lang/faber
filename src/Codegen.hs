@@ -26,6 +26,7 @@ import qualified LLVM.IRBuilder.Monad       as IR
 import qualified LLVM.Context as LLVM
 import qualified LLVM.Module  as LLVM
 
+import qualified Errors    as Err
 import           Hoist
 import qualified Operators as Op
 import           Utils
@@ -177,6 +178,13 @@ genExpr (If c t e) = mdo
   IR.br ifExit
   ifExit <- IR.block
   IR.load res 0
+
+genExpr (Error err) = do
+  puts <- IR.extern "puts" [Ty.ptr Ty.i8] Ty.i32
+  msg <- IR.globalStringPtr (Err.message err) "err"
+  _ <- IR.call puts [(msg, [])]
+  exit <- IR.extern "exit" [Ty.i32] Ty.void
+  IR.call exit [(constInt 1, [])]
 
 genFunction :: (IR.MonadModuleBuilder m, MonadFix m) => String -> Function -> m AST.Operand
 genFunction name (Function n expr) =

@@ -4,6 +4,7 @@ import Control.Exception   (assert)
 import Control.Monad.State
 import Data.List
 
+import qualified Errors    as Err
 import qualified Flatten   as F
 import qualified Operators as Op
 import           Utils
@@ -29,6 +30,7 @@ data Expr
   | LocalLet Expr Expr
   | LocalBound
   | LetIn Expr Expr
+  | Error Err.Error
   deriving (Show, Eq)
 
 data Def = Name String Expr deriving (Show, Eq)
@@ -78,6 +80,7 @@ closureBody (F.If c t e) = If <$> closureBody c <*> closureBody t <*> closureBod
 closureBody (F.LocalLet a b) = LocalLet <$> closureBody a <*> closureBody b
 closureBody F.Alloc = return Alloc
 closureBody F.LocalBound = return LocalBound
+closureBody (F.Error err) = return $ Error err
 closureBody (F.LetIn def body) = LetIn <$> closureBody def <*> closureBody body
 
 -- closure a top-level expression

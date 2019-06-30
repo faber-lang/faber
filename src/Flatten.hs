@@ -3,6 +3,7 @@ module Flatten where
 import Control.Exception    (assert)
 import Control.Monad.Reader
 
+import qualified Errors    as Err
 import qualified Lazy      as L
 import qualified Nameless  as N
 import qualified Operators as Op
@@ -33,6 +34,7 @@ data Expr
   | LocalLet Expr Expr
   | LocalBound
   | LetIn Expr Expr
+  | Error Err.Error
   deriving (Show, Eq)
 
 data Def = Name String Expr deriving (Show, Eq)
@@ -78,6 +80,7 @@ replace (L.Deref x) = L.Deref <$> replace x
 replace (L.If c t e) = L.If <$> replace c <*> replace t <*> replace e
 replace (L.LocalLet a b) = L.LocalLet <$> replace a <*> replace b
 replace L.LocalBound = return L.LocalBound
+replace (L.Error err) = return $ L.Error err
 replace (L.LetBound i) = asks (conv i)
   where
     conv idx@(N.LetIndex lam let_ inn) (ReplaceState lamI letI defc)
@@ -104,6 +107,7 @@ flattenExpr (L.Deref x) = Deref $ flattenExpr x
 flattenExpr (L.If c t e) = If (flattenExpr c) (flattenExpr t) (flattenExpr e)
 flattenExpr (L.LocalLet a b) = LocalLet (flattenExpr a) (flattenExpr b)
 flattenExpr L.LocalBound = LocalBound
+flattenExpr (L.Error err) = Error err
 flattenExpr (L.LetIn defs body) = foldrN alloc assignments (length defs)
   where
     body' = flattenExpr $ runReplace body
@@ -129,6 +133,7 @@ replaceGlobal (L.Deref x) = L.Deref $ replaceGlobal x
 replaceGlobal (L.If c t e) = L.If (replaceGlobal c) (replaceGlobal t) (replaceGlobal e)
 replaceGlobal (L.LocalLet a b) = L.LocalLet (replaceGlobal a) (replaceGlobal b)
 replaceGlobal L.LocalBound = L.LocalBound
+replaceGlobal (L.Error err) = L.Error err
 replaceGlobal (L.LetIn defs body) = L.LetIn (map replaceGlobal defs) (replaceGlobal body)
 
 flatten :: L.Code -> Code
