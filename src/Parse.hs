@@ -119,7 +119,7 @@ pattern_ = try (parens pattern_)
 
 -- expression parser
 exprRws :: [String]
-exprRws = ["let", "in", "where", "if", "then", "else"]
+exprRws = ["let", "in", "where", "if", "then", "else", "match", "with"]
 
 identifier :: Parser Ident
 identifier = identifier' exprRws
@@ -150,6 +150,20 @@ ifThenElse = do
   rword "else"
   If cond then_ <$> expr
 
+match_ :: Parser Expr
+match_ = do
+  rword "match"
+  target <- expr
+  rword "with"
+  _ <- optional $ symbol "|"
+  Match target <$> arm `sepBy1` symbol "|"
+  where
+    arm = do
+      pat <- pattern_
+      symbol "->"
+      body <- expr
+      return (pat, body)
+
 operators :: [[Operator Parser Expr]]
 operators =
   [ [ InfixL (Apply <$ symbol "") ],
@@ -165,6 +179,7 @@ term = try (parens expr)
   <|> tuple
   <|> letIn
   <|> ifThenElse
+  <|> match_
   <|> lambda
   <|> Variable <$> identifier
   <|> Integer <$> integer
