@@ -184,7 +184,8 @@ genExpr (Error err) = do
   msg <- IR.globalStringPtr (Err.message err) "err"
   _ <- IR.call puts [(msg, [])]
   exit <- IR.extern "exit" [Ty.i32] Ty.void
-  IR.call exit [(constInt 1, [])]
+  _ <- IR.call exit [(AST.ConstantOperand $ Const.Int 32 1, [])]
+  IR.inttoptr (constInt 0) genericPtr
 
 genFunction :: (IR.MonadModuleBuilder m, MonadFix m) => String -> Function -> m AST.Operand
 genFunction name (Function n expr) =
