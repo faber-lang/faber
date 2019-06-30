@@ -101,6 +101,22 @@ identifier' rws = (lexeme . try) (p >>= check)
     check x | x `elem` rws = fail $ "attempt to parse " ++ show x ++ "as an identifier"
             | otherwise    = return x
 
+-- pattern parser
+patIdentifier :: Parser Ident
+patIdentifier = identifier' []
+
+patWildcard :: Parser Pattern
+patWildcard = symbol "_" >> return PWildcard
+
+patTuple :: Parser Pattern
+patTuple = PTuple <$> parens (pattern_ `sepEndBy` symbol ",")
+
+pattern_ :: Parser Pattern
+pattern_ = try (parens pattern_)
+  <|> patTuple
+  <|> PVar <$> patIdentifier
+  <|> PInt <$> integer
+
 -- expression parser
 exprRws :: [String]
 exprRws = ["let", "in", "where", "if", "then", "else"]
