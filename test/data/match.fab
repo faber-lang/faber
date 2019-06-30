@@ -1,0 +1,16 @@
+name fst3 :: forall a b c. (a, b, c) -> a
+name fst3 x = match x with (a, _, _) -> a
+
+name extract x =
+  match f x with
+  | ((1, 2, 3), (a, b, c, d)) -> a + b + c + d
+  | (t1, t2) -> fst3 t1 + (match t2 with
+                          | (1, a, b, c) -> a * b * c
+                          | (a, b, c, d) -> a + b + c + d)
+  where
+    f x = match x with ((a, (b, c)), ((d, e), (f, g))) -> ((a, b, c), (d, e, f, g))
+
+name main = extract t1 + extract t2
+  where
+  - t1 = ((1, (2, 3)), ((4, 5), (6, 7)))
+  - t2 = ((4, (5, 6)), ((1, 2), (3, 4)))
