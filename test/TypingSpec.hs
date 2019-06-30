@@ -37,7 +37,7 @@ var :: Int -> Expr
 var = ParamBound
 
 fRef :: Expr
-fRef = LetBound $ LetIndex 0 0 0 0
+fRef = LetBound $ LetIndex 0 0 0
 
 -- test cases
 spec :: Spec

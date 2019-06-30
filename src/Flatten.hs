@@ -10,7 +10,7 @@ import           Utils
 
 data LetIndex =
   LetIndex { lambdaIndex :: Int
-           , localIndex  :: Int }
+           , letIndex    :: Int }
   deriving (Show, Eq)
 
 data Expr
@@ -44,7 +44,7 @@ data Code =
 
 data ReplaceState =
   ReplaceState { stLambdaIndex :: Int
-               , stLocalIndex  :: Int
+               , stLetIndex    :: Int
                , stDefCount    :: Int }
 initState :: ReplaceState
 initState = ReplaceState 0 0 0
@@ -54,12 +54,12 @@ type Replace = Reader ReplaceState
 withNewLambda :: Replace a -> Replace a
 withNewLambda = local update
   where
-    update (ReplaceState lamI _ _) = ReplaceState (succ lamI) 0 0
+    update (ReplaceState lamI letI defC) = ReplaceState (succ lamI) letI defC
 
 withNewLet :: Int -> Replace a -> Replace a
 withNewLet n = local update
   where
-    update (ReplaceState lamI letI locI) = ReplaceState lamI (succ letI) (locI + n)
+    update (ReplaceState lamI letI defC) = ReplaceState lamI (succ letI) (defC + n)
 
 replace :: L.Expr -> Replace L.Expr
 replace (L.Integer i) = return $ L.Integer i
@@ -80,8 +80,8 @@ replace (L.LocalLet a b) = L.LocalLet <$> replace a <*> replace b
 replace L.LocalBound = return L.LocalBound
 replace (L.LetBound i) = asks (conv i)
   where
-    conv idx@(N.LetIndex lam _ loc inn) (ReplaceState lamI locI defc)
-                | lamI == lam && loc == locI = L.Deref $ L.LetBound $ N.LetIndex lamI 0 (inn + defc) 0
+    conv idx@(N.LetIndex lam let_ inn) (ReplaceState lamI letI defc)
+                | lamI == lam && letI == let_ = L.Deref $ L.LetBound $ N.LetIndex lamI (inn + defc) 0
                 | otherwise = L.LetBound idx
 
 runReplace :: L.Expr -> L.Expr
@@ -92,7 +92,7 @@ flattenExpr (L.Integer i) = Integer i
 flattenExpr (L.Lambda body) = Lambda $ flattenExpr body
 flattenExpr (L.Apply a b) = Apply (flattenExpr a) (flattenExpr b)
 flattenExpr (L.ParamBound i) = ParamBound i
-flattenExpr (L.LetBound (N.LetIndex lam _ loc inn)) = assert (inn == 0) $ LetBound $ LetIndex lam loc
+flattenExpr (L.LetBound (N.LetIndex lam let_ inn)) = assert (inn == 0) $ LetBound $ LetIndex lam let_
 flattenExpr (L.GlobalBound name) = GlobalBound name
 flattenExpr (L.BinaryOp op a b) = BinaryOp op (flattenExpr a) (flattenExpr b)
 flattenExpr (L.SingleOp op x) = SingleOp op $ flattenExpr x

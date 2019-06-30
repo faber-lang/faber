@@ -53,7 +53,7 @@ closureBody :: F.Expr -> Closure Expr
 closureBody (F.ParamBound 0) = return Parameter
 closureBody (F.ParamBound i) = flip NthOf Env <$> update (F.ParamBound $ i - 1)
 closureBody (F.GlobalBound s) = flip NthOf Env <$> update (F.GlobalBound s)
-closureBody (F.LetBound i) | F.lambdaIndex i == 0 = return $ LetBound $ F.localIndex i
+closureBody (F.LetBound i) | F.lambdaIndex i == 0 = return $ LetBound $ F.letIndex i
                            | otherwise            = flip NthOf Env <$> update (F.LetBound $ decrLambdaIndex i)
                            where
                              decrLambdaIndex (F.LetIndex lam loc) = F.LetIndex (pred lam) loc
@@ -81,7 +81,7 @@ closureBody (F.LetIn def body) = LetIn <$> closureBody def <*> closureBody body
 -- closure a top-level expression
 closureExpr :: F.Expr -> Expr
 closureExpr (F.ParamBound i) = error $ "Invalid occurrence of parameter " ++ show i
-closureExpr (F.LetBound i) | F.lambdaIndex i == 0 = LetBound $ F.localIndex i
+closureExpr (F.LetBound i) | F.lambdaIndex i == 0 = LetBound $ F.letIndex i
                            | otherwise            = error $ "Invalid occurrence of variable " ++ show i
 closureExpr (F.GlobalBound s) = GlobalName s
 closureExpr (F.Lambda e) = Tuple [Function body, t]

@@ -14,13 +14,12 @@ import           Utils
 
 data LetIndex =
   LetIndex { lambdaIndex :: Int
-           , localIndex  :: Int
            , letIndex    :: Int
            , innerIndex  :: Int }
   deriving (Show, Eq)
 
 mapLambdaIndex :: (Int -> Int) -> LetIndex -> LetIndex
-mapLambdaIndex f (LetIndex lamI locI letI innI) = LetIndex (f lamI) locI letI innI
+mapLambdaIndex f (LetIndex lamI letI innI) = LetIndex (f lamI) letI innI
 
 data Expr
   = Integer Int
@@ -54,19 +53,18 @@ withBinding new = local (new:)
 
 data FindState =
   FindState { stLambdaIndex :: Int
-            , stLocalIndex  :: Int
             , stLetIndex    :: Int }
 initState :: FindState
-initState = FindState 0 0 0
+initState = FindState 0 0
 withNewLambda :: Finder a -> Finder a
 withNewLambda = local update
   where
     -- reset localI in new lambda
-    update (FindState lamI _ letI) = FindState (succ lamI) 0 letI
+    update (FindState lamI letI) = FindState (succ lamI) letI
 withNewLet :: Finder a -> Finder a
 withNewLet = local update
   where
-    update (FindState lamI localI letI) = FindState lamI (succ localI) (succ letI)
+    update (FindState lamI letI) = FindState lamI (succ letI)
 
 type Finder = Reader FindState
 findInEnv :: Env -> String -> Finder Expr
@@ -78,7 +76,7 @@ findInEnv (Let bs:xs) s =
   case s `elemIndex` bs of
     Just i -> do
       st <- ask
-      return $ LetBound $ LetIndex (stLambdaIndex st) (stLocalIndex st) (stLetIndex st) i
+      return $ LetBound $ LetIndex (stLambdaIndex st) (stLetIndex st) i
     Nothing -> withNewLet $ findInEnv xs s
 findInEnv [] s = error $ "Unbound variable " ++ s
 

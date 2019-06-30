@@ -123,7 +123,7 @@ findParam i = do
   return $ lookupParam env i
 
 findLocal :: N.LetIndex -> Infer Scheme
-findLocal (N.LetIndex _ _ local inner) = do
+findLocal (N.LetIndex _ local inner) = do
   (env, _) <- ask
   return $ lookupLocal env local inner
 
