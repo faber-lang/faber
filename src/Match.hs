@@ -30,12 +30,15 @@ type Code = [Def]
 
 convertPattern :: Expr -> Expr -> Pattern -> Expr -> Expr
 convertPattern fallback target pat expr = case pat of
-  PVar s    -> LetIn [NameDef s target] expr
+  -- `s` must be fresh in rhs of LetIn and NameDef
+  PVar s    -> localLet target $ LetIn [NameDef s localBound] expr
   PWildcard -> expr
   PInt i    -> If (BinaryOp Op.Eq target $ Integer i) expr fallback
-  PTuple ps -> foldr (folder $ length ps) expr (zip ps [0..])
+  PTuple ps -> localLet target $ foldr (folder $ length ps) expr (zip ps [0..])
   where
-    folder len (x, idx) = convertPattern fallback (NthOf len idx target) x
+    folder len (x, idx) = convertPattern fallback (NthOf len idx localBound) x
+    localLet a = LetIn [NameDef "__" a]
+    localBound = Variable "__"
 
 convertExpr :: D.Expr -> Expr
 convertExpr (D.Apply fn arg) = Apply (convertExpr fn) (convertExpr arg)
