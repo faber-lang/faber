@@ -1,8 +1,9 @@
 module Desugar where
 
-import qualified Operators as Op
-import           Parse     (TypeScheme)
-import qualified Parse     as P
+import           Data.Tuple.Extra (second)
+import qualified Operators        as Op
+import           Parse            (TypeScheme)
+import qualified Parse            as P
 
 data Expr
   = Integer Int
@@ -14,6 +15,7 @@ data Expr
   | Tuple [Expr]
   | LetIn [NameDef] Expr
   | If Expr Expr Expr
+  | Match Expr [(P.Pattern, Expr)]
   deriving (Show, Eq)
 
 data NameDef
@@ -38,6 +40,7 @@ desugarExpr (P.SingleOp op x)   = SingleOp op $ desugarExpr x
 desugarExpr (P.Tuple xs)        = Tuple $ map desugarExpr xs
 desugarExpr (P.LetIn defs x)    = LetIn (map desugarNameDef defs) $ desugarExpr x
 desugarExpr (P.If c t e)        = If (desugarExpr c) (desugarExpr t) (desugarExpr e)
+desugarExpr (P.Match t arms)    = Match (desugarExpr t) (map (second desugarExpr) arms)
 
 desugarNameDef :: P.NameDef -> NameDef
 desugarNameDef (P.NameDef name ps body []) = NameDef name $ desugarLambda ps $ desugarExpr body
