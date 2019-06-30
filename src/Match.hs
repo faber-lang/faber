@@ -16,6 +16,8 @@ data Expr
   | LetIn [NameDef] Expr
   | If Expr Expr Expr
   | NthOf Int Int Expr
+  | LocalLet Expr Expr
+  | LocalBound
   | Error Err.Error
   deriving (Show, Eq)
 
@@ -29,13 +31,15 @@ newtype Def = Name NameDef deriving (Show, Eq)
 type Code = [Def]
 
 convertPattern :: Expr -> Expr -> Pattern -> Expr -> Expr
-convertPattern fallback target pat expr = case pat of
-  PVar s    -> LetIn [NameDef s target] expr
+convertPattern fallback target pat expr = LocalLet target $ case pat of
+  -- make sure that s is free in target'...
+  PVar s    -> LetIn [NameDef s target'] expr
   PWildcard -> expr
-  PInt i    -> If (BinaryOp Op.Eq target $ Integer i) expr fallback
+  PInt i    -> If (BinaryOp Op.Eq target' $ Integer i) expr fallback
   PTuple ps -> foldr (folder $ length ps) expr (zip ps [0..])
   where
-    folder len (x, idx) = convertPattern fallback (NthOf len idx target) x
+    folder len (x, idx) = convertPattern fallback (NthOf len idx target') x
+    target' = LocalBound
 
 convertExpr :: D.Expr -> Expr
 convertExpr (D.Apply fn arg) = Apply (convertExpr fn) (convertExpr arg)
