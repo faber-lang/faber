@@ -1,6 +1,7 @@
 module Match where
 
 import qualified Desugar   as D
+import qualified Errors    as Err
 import qualified Operators as Op
 import           Parse     (Pattern (..), TypeScheme)
 
@@ -15,7 +16,7 @@ data Expr
   | LetIn [NameDef] Expr
   | If Expr Expr Expr
   | NthOf Int Int Expr
-  | MatchFail
+  | Error Err.Error
   deriving (Show, Eq)
 
 data NameDef
@@ -52,7 +53,7 @@ convertExpr (D.If c t e) = If (convertExpr c) (convertExpr t) (convertExpr e)
 convertExpr (D.Match target arms) = matcher (convertExpr target) arms
   where
     matcher t ((p, e):xs) = convertPattern (matcher t xs) t p (convertExpr e)
-    matcher _ []          = MatchFail
+    matcher _ []          = Error Err.MatchFail
 
 convertDef :: D.Def -> Def
 convertDef (D.Name (D.NameDef name expr)) = Name (NameDef name $ convertExpr expr)
