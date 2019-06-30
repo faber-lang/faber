@@ -114,6 +114,7 @@ patTuple = PTuple <$> parens (pattern_ `sepEndBy` symbol ",")
 pattern_ :: Parser Pattern
 pattern_ = try (parens pattern_)
   <|> patTuple
+  <|> patWildcard
   <|> PVar <$> patIdentifier
   <|> PInt <$> integer
 
