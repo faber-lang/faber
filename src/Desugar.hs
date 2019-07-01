@@ -9,6 +9,7 @@ data Expr
   = Integer Int
   | Lambda String Expr
   | Apply Expr Expr
+  | CtorApp String Expr
   | Variable String
   | BinaryOp Op.BinaryOp Expr Expr
   | SingleOp Op.SingleOp Expr
@@ -55,14 +56,25 @@ desugarNameDef (P.NameDef name ps body defs) = NameDef name $ LetIn (map desugar
 -- using `TypeScheme` from `Parse` directly
 desugarNameDef (P.TypeAnnot name ty) = TypeAnnot name ty
 
-desugarTypeDef :: P.TypeDef -> TypeDef
-desugarTypeDef (P.Variant xs) = Variant $ map f xs
+makeCtorFunction :: (String, [TypeExpr]) -> Def
+makeCtorFunction (ctor, ts) = Name $ NameDef ctor $ desugarLambda names body
+  where
+    name i = "__ctorparam" ++ show i
+    names = map name [0..(pred $ length ts)]
+    body = CtorApp ctor (Tuple $ map Variable names)
+
+desugarTypeDef :: P.TypeDef -> (TypeDef, [Def])
+desugarTypeDef (P.Variant xs) = (typeDef, nameDefs)
   where
     f (ctor, ts) = (ctor, Product ts)
+    typeDef = Variant $ map f xs
+    nameDefs = map makeCtorFunction xs
 
-desugarDef :: P.Def -> Def
-desugarDef (P.Name body)           = Name $ desugarNameDef body
-desugarDef (P.Type name vars body) = Type name vars $ desugarTypeDef body
+desugarDef :: P.Def -> [Def] -> [Def]
+desugarDef (P.Name body) acc           = (Name $ desugarNameDef body):acc
+desugarDef (P.Type name vars body) acc = (Type name vars typeDef):nameDefs ++ acc
+  where
+    (typeDef, nameDefs) = desugarTypeDef body
 
 desugar :: P.Code -> Code
-desugar = map desugarDef
+desugar = foldr desugarDef []
