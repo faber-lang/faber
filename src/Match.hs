@@ -3,7 +3,7 @@ module Match where
 import qualified Desugar   as D
 import qualified Errors    as Err
 import qualified Operators as Op
-import           Parse     (Pattern (..), TypeScheme)
+import           Parse     (Pattern (..), TypeExpr, TypeScheme)
 
 data Expr
   = Integer Int
@@ -24,7 +24,14 @@ data NameDef
   | TypeAnnot String TypeScheme
   deriving (Show, Eq)
 
-newtype Def = Name NameDef deriving (Show, Eq)
+newtype TypeDef
+  = Variant [(String, TypeExpr)]
+  deriving (Show, Eq)
+
+data Def
+  = Name NameDef
+  | Type String [String] TypeDef
+  deriving (Show, Eq)
 
 type Code = [Def]
 
@@ -65,6 +72,7 @@ convertExpr (D.Match target arms) = matcher (convertExpr target) arms
 convertDef :: D.Def -> Def
 convertDef (D.Name (D.NameDef name expr)) = Name (NameDef name $ convertExpr expr)
 convertDef (D.Name (D.TypeAnnot name scheme)) = Name (TypeAnnot name scheme)
+convertDef (D.Type name vars (D.Variant xs)) = Type name vars $ Variant xs
 
 convertCode :: D.Code -> Code
 convertCode = map convertDef

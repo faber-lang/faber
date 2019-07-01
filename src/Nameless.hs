@@ -10,7 +10,7 @@ import qualified Data.Map             as Map
 import qualified Errors    as Err
 import qualified Match     as M
 import qualified Operators as Op
-import           Parse     (TypeScheme)
+import           Parse     (TypeExpr, TypeScheme)
 import           Utils
 
 data LetIndex =
@@ -38,9 +38,18 @@ data Expr
   | Error Err.Error
   deriving (Show, Eq)
 
-data Def = Name String Expr deriving (Show, Eq)
+data NameDef
+  = Name String Expr deriving (Show, Eq)
 
-data Code = Code (Map.Map String TypeScheme) [Def] deriving (Show, Eq)
+data TypeDef
+  = Variant String [String] [(String, TypeExpr)]
+  deriving (Show, Eq)
+
+data Code =
+  Code { annotations :: (Map.Map String TypeScheme)
+       , typeDefs    :: [TypeDef]
+       , nameDefs    :: [NameDef] }
+       deriving (Show, Eq)
 
 -- types for the conversion
 data Binding
@@ -115,19 +124,22 @@ namelessExpr (M.If c t e) = If <$> namelessExpr c <*> namelessExpr t <*> nameles
 namelessExpr (M.NthOf n i e) = NthOf n i <$> namelessExpr e
 namelessExpr (M.Error err) = return $ Error err
 
-namelessNameDef :: M.Def -> Nameless (Maybe Def)
+namelessNameDef :: M.Def -> Nameless (Maybe NameDef)
 namelessNameDef (M.Name (M.NameDef name expr)) = Just . Name name <$> namelessExpr expr
 namelessNameDef _ = return Nothing
 
 namelessDefs :: [M.Def] -> Nameless Code
-namelessDefs defs = Code annots <$> foldr collectNames body defs
+namelessDefs defs = Code annots tDefs <$> foldr collectNames body defs
   where
     body = mapMaybeM namelessNameDef defs
     annots = foldr collectAnnots Map.empty defs
+    tDefs = foldr collectTypeDefs [] defs
     collectNames (M.Name (M.NameDef name _)) acc = withBinding (Global name) acc
-    collectNames (M.Name (M.TypeAnnot _ _)) acc  = acc
-    collectAnnots (M.Name (M.NameDef _ _))           = id
+    collectNames _ acc = acc
     collectAnnots (M.Name (M.TypeAnnot name scheme)) = Map.insert name scheme
+    collectAnnots _                                  = id
+    collectTypeDefs (M.Type name vars (M.Variant xs)) = (Variant name vars xs:)
+    collectTypeDefs _ = id
 
 namelessCode :: M.Code -> Nameless Code
 namelessCode = namelessDefs
