@@ -50,7 +50,14 @@ data NameDef
   | TypeAnnot String TypeScheme
   deriving (Show, Eq)
 
-newtype Def = Name NameDef deriving (Show, Eq)
+newtype TypeDef
+  = Variant [(String, [TypeExpr])]
+  deriving (Show, Eq)
+
+data Def
+  = Name NameDef
+  | Type String [String] TypeDef
+  deriving (Show, Eq)
 
 type Code = [Def]
 
@@ -59,7 +66,7 @@ type Parser = Parsec Void String
 
 -- lexer utils
 headRws :: [Parser ()]
-headRws = [char_ '-', string_ "name"]
+headRws = [char_ '-', string_ "name", string_ "type"]
   where
     char_   = void . C.char
     string_ = void . C.string
@@ -247,10 +254,28 @@ nameDefs = many (optional hyphen >> nameDef)
   where
     hyphen = try (newline >> symbol "-")
 
-definition :: Parser Def
-definition = Name <$> (delim >> nameDef)
+defName :: Parser Def
+defName = Name <$> (delim >> nameDef)
   where
     delim = try (optional newline >> symbol "name")
+
+defType :: Parser Def
+defType = delim >> body
+  where
+    delim = try (optional newline >> symbol "type")
+    body = do
+      name <- identifier
+      vars <- many identifier
+      symbol "="
+      _ <- optional $ symbol "|"
+      Type name vars . Variant <$> variant `sepBy1` symbol "|"
+    variant = do
+      ctor <- identifier
+      params <- many typeExpr
+      return (ctor, params)
+
+definition :: Parser Def
+definition = defName <|> defType
 
 definitions :: Parser [Def]
 definitions = some definition
