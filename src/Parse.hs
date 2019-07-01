@@ -39,6 +39,7 @@ data TypeExpr
   = Ident String
   | Function TypeExpr TypeExpr
   | Product [TypeExpr]
+  | ApplyTy TypeExpr TypeExpr
   deriving (Show, Eq)
 
 data TypeScheme
@@ -204,7 +205,8 @@ typeIdentifier = identifier' typeRws
 
 typeOperators :: [[Operator Parser TypeExpr]]
 typeOperators =
-  [ [ InfixR (Function <$ symbol "->") ] ]
+  [ [ InfixL (ApplyTy <$ symbol "") ],
+    [ InfixR (Function <$ symbol "->") ] ]
 
 typeProd :: Parser TypeExpr
 typeProd = Product <$> parens (typeExpr `sepEndBy` symbol ",")
