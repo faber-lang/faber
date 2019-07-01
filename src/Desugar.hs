@@ -2,7 +2,7 @@ module Desugar where
 
 import           Data.Tuple.Extra (second)
 import qualified Operators        as Op
-import           Parse            (TypeScheme)
+import           Parse            (TypeExpr (..), TypeScheme)
 import qualified Parse            as P
 
 data Expr
@@ -23,7 +23,14 @@ data NameDef
   | TypeAnnot String TypeScheme
   deriving (Show, Eq)
 
-newtype Def = Name NameDef deriving (Show, Eq)
+newtype TypeDef
+  = Variant [(String, TypeExpr)]
+  deriving (Show, Eq)
+
+data Def
+  = Name NameDef
+  | Type String [String] TypeDef
+  deriving (Show, Eq)
 
 type Code = [Def]
 
@@ -48,8 +55,14 @@ desugarNameDef (P.NameDef name ps body defs) = NameDef name $ LetIn (map desugar
 -- using `TypeScheme` from `Parse` directly
 desugarNameDef (P.TypeAnnot name ty) = TypeAnnot name ty
 
+desugarTypeDef :: P.TypeDef -> TypeDef
+desugarTypeDef (P.Variant xs) = Variant $ map f xs
+  where
+    f (ctor, ts) = (ctor, Product ts)
+
 desugarDef :: P.Def -> Def
-desugarDef (P.Name body) = Name $ desugarNameDef body
+desugarDef (P.Name body)           = Name $ desugarNameDef body
+desugarDef (P.Type name vars body) = Type name vars $ desugarTypeDef body
 
 desugar :: P.Code -> Code
 desugar = map desugarDef
