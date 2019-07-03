@@ -28,6 +28,8 @@ data Type
   = Integer
   | Function Type Type
   | Variable TVar Level
+  | Apply Type Type
+  | Enum String
   | Tuple [Type]
   deriving (Show, Eq)
 
@@ -66,13 +68,17 @@ class Substitutable a where
 instance Substitutable Type where
   apply s t@(Variable i _) = Map.findWithDefault t i s
   apply s (Function a b)   = Function (apply s a) (apply s b)
+  apply s (Apply a b)      = Apply (apply s a) (apply s b)
   apply s (Tuple xs)       = Tuple $ apply s xs
-  apply s Integer          = Integer
+  apply _ Integer          = Integer
+  apply _ (Enum n)         = Enum n
 
   ftv (Function a b) = ftv a `Set.union` ftv b
+  ftv (Apply a b)    = ftv a `Set.union` ftv b
   ftv (Variable i _) = Set.singleton i
   ftv (Tuple xs)     = ftv xs
   ftv Integer        = Set.empty
+  ftv (Enum _)       = Set.empty
 
 instance Substitutable Scheme where
   apply s (Forall as t) = Forall as $ apply (foldr Map.delete s as) t
@@ -165,6 +171,10 @@ unify (Variable i _) t = bind i t
 unify t (Variable i _) = bind i t
 unify Integer Integer = return nullSubst
 unify (Tuple a) (Tuple b) = foldr compose nullSubst <$> zipWithM unify a b
+unify (Apply a1 b1) (Apply a2 b2) = do
+  s_a <- unify a1 a2
+  s_b <- unify (apply s_a b1) (apply s_a b2)
+  return $ s_a `compose` s_b
 unify t1 t2 = throwError $ UnificationFail t1 t2
 
 -- annot -> ty -> subst
@@ -178,6 +188,10 @@ unifyAnnot t (Variable i _) = bind i t
 unifyAnnot (Variable i _) t = throwError $ RigidUnificationFail i t
 unifyAnnot Integer Integer = return nullSubst
 unifyAnnot (Tuple a) (Tuple b) = foldr compose nullSubst <$> zipWithM unifyAnnot a b
+unifyAnnot (Apply a1 b1) (Apply a2 b2) = do
+  s_a <- unifyAnnot a1 a2
+  s_b <- unifyAnnot (apply s_a b1) (apply s_a b2)
+  return $ s_a `compose` s_b
 unifyAnnot t1 t2 = throwError $ UnificationFail t1 t2
 
 bind :: Int -> Type -> Infer Subst
@@ -194,7 +208,12 @@ generalizer (Function a b) = do
   s1 <- generalizer a
   s2 <- generalizer (apply s1 b)
   return $ s1 `compose` s2
+generalizer (Apply a b) = do
+  s1 <- generalizer a
+  s2 <- generalizer (apply s1 b)
+  return $ s1 `compose` s2
 generalizer Integer = return nullSubst
+generalizer (Enum _) = return nullSubst
 generalizer (Tuple xs) = foldr compose nullSubst <$> mapM generalizer xs
 generalizer (Variable i (Free level)) = do
   cLevel <- view letLevel
