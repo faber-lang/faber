@@ -8,6 +8,7 @@ import           Parse     (Pattern (..), TypeExpr, TypeScheme)
 data Expr
   = Integer Int
   | Lambda String Expr
+  | CtorApp String Expr
   | Apply Expr Expr
   | Variable String
   | BinaryOp Op.BinaryOp Expr Expr
@@ -54,6 +55,7 @@ runConvertPattern = convertPattern 0
 convertExpr :: D.Expr -> Expr
 convertExpr (D.Apply fn arg) = Apply (convertExpr fn) (convertExpr arg)
 convertExpr (D.Lambda p body) = Lambda p $ convertExpr body
+convertExpr (D.CtorApp name e) = CtorApp name $ convertExpr e
 convertExpr (D.LetIn defs body) = LetIn (map go defs) (convertExpr body)
   where
     go (D.NameDef name expr)     = NameDef name $ convertExpr expr

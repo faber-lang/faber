@@ -25,6 +25,7 @@ mapLambdaIndex f (LetIndex lamI letI innI) = LetIndex (f lamI) letI innI
 data Expr
   = Integer Int
   | Lambda Expr
+  | CtorApp String Expr
   | Apply Expr Expr
   | ParamBound Int
   | LetBound LetIndex
@@ -110,6 +111,7 @@ destructDefs defs = runState (foldrM f ([], []) defs) Map.empty
 namelessExpr :: M.Expr -> Nameless Expr
 namelessExpr (M.Apply fn arg) = Apply <$> namelessExpr fn <*> namelessExpr arg
 namelessExpr (M.Lambda p body) = Lambda <$> withBinding (Param p) (namelessExpr body)
+namelessExpr (M.CtorApp name e) = CtorApp name <$> namelessExpr e
 namelessExpr (M.LetIn defs body) = withBinding (Let names) $ LetIn schemes <$> bodies' <*> namelessExpr body
   where
     ((names, bodies), sig) = destructDefs defs

@@ -311,6 +311,11 @@ inferExpr (N.NthOf n i e) = do
   s2 <- unify (Tuple ts) t2
   return (s1 `compose` s2, apply s2 $ ts !! i)
 inferExpr (N.Error _) = (,) nullSubst <$> freshFree
+inferExpr (N.CtorApp name e) = do
+  (s1, t1) <- inferExpr e
+  (tr, tp) <- uses ctorEnv (Map.! name)
+  s2 <- unify t1 (apply s1 tp)
+  return (s1 `compose` s2, apply s2 tr)
 
 inferDefs :: Map.Map String Scheme -> [N.NameDef] -> Infer ()
 inferDefs sig defs = do
@@ -335,7 +340,9 @@ inferCode (N.Code sig typeDefs defs) = do
   flip inferDefs defs =<< mapMapM evalScheme sig
 
 defineTypes :: [N.TypeDef] -> Infer ()
-defineTypes xs = withNames names' $ mapM_ defineOne xs
+defineTypes xs = do
+  evalEnv %= flip Map.union names'
+  mapM_ defineOne xs
   where
     defineOne :: N.TypeDef -> Infer ()
     defineOne (N.Variant name as ctors) = do
