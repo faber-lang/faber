@@ -126,34 +126,34 @@ fresh :: Level -> Infer Type
 fresh level = unique += 1 >> uses unique (flip Variable level)
 
 freshFree :: Infer Type
-freshFree = fresh =<< asks (Free . view letLevel)
+freshFree = fresh =<< views letLevel Free
 
 freshBound :: Infer Type
 freshBound = fresh Bound
 
 findParam :: Int -> Infer Type
-findParam i = asks (lookupParam i . view typeEnv)
+findParam i = views typeEnv (lookupParam i)
 
 findLocal :: N.LetIndex -> Infer Scheme
-findLocal (N.LetIndex _ local inner) = asks (lookupLocal local inner . view typeEnv)
+findLocal (N.LetIndex _ local inner) = views typeEnv (lookupLocal local inner)
 
 findGlobal :: String -> Infer Scheme
 findGlobal s = fromMaybeM (throwError $ UnboundVariable s) $ lookupGlobal s <$> view typeEnv
 
 withParam :: Type -> Infer a -> Infer a
-withParam = local . over typeEnv . appendParam
+withParam = locally typeEnv . appendParam
 
 withGlobal :: String -> Scheme -> Infer a -> Infer a
-withGlobal name = local . over typeEnv . appendGlobal name
+withGlobal name = locally typeEnv . appendGlobal name
 
 withSubst :: Subst -> Infer a -> Infer a
-withSubst = local . over typeEnv . apply
+withSubst = locally typeEnv . apply
 
 withLocals :: [Scheme] -> Infer a -> Infer a
-withLocals = local . over typeEnv . appendLocal
+withLocals = locally typeEnv . appendLocal
 
 pushLevel :: Infer a -> Infer a
-pushLevel = local $ over letLevel succ
+pushLevel = locally letLevel succ
 
 unify :: Type -> Type -> Infer Subst
 unify (Function a1 b1) (Function a2 b2) = do
