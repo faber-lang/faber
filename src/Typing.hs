@@ -34,24 +34,25 @@ data Type
 data Scheme = Forall [TVar] Type
 
 data TypeEnv =
-  TypeEnv { params  :: [Type]
-          , locals  :: [[Scheme]]
-          , globals :: Map.Map String Scheme }
+  TypeEnv { _params  :: [Type]
+          , _locals  :: [[Scheme]]
+          , _globals :: Map.Map String Scheme }
+makeLenses ''TypeEnv
 
 initEnv :: TypeEnv
 initEnv = TypeEnv [] [] Map.empty
-lookupParam :: TypeEnv -> Int -> Type
-lookupParam (TypeEnv env _ _)  = (env !!)
-lookupLocal :: TypeEnv -> Int -> Int -> Scheme
-lookupLocal (TypeEnv _ env _)  = (!!) . (env !!)
-lookupGlobal :: TypeEnv -> String -> Maybe Scheme
-lookupGlobal (TypeEnv _ _ env) = flip Map.lookup env
-appendParam :: TypeEnv -> Type -> TypeEnv
-appendParam (TypeEnv ps ls gs) t = TypeEnv (t:ps) ls gs
-appendLocal :: TypeEnv -> [Scheme] -> TypeEnv
-appendLocal (TypeEnv ps ls gs) t = TypeEnv ps (t:ls) gs
-appendGlobal :: TypeEnv -> String -> Scheme -> TypeEnv
-appendGlobal (TypeEnv ps ls gs) k v = TypeEnv ps ls $ Map.insert k v gs
+lookupParam :: Int -> TypeEnv -> Type
+lookupParam i = views params (!! i)
+lookupLocal :: Int -> Int -> TypeEnv -> Scheme
+lookupLocal i1 i2  = views locals ((!! i2) . (!! i1))
+lookupGlobal :: String -> TypeEnv -> Maybe Scheme
+lookupGlobal name = views globals (Map.lookup name)
+appendParam :: Type -> TypeEnv -> TypeEnv
+appendParam t = over params (t:)
+appendLocal :: [Scheme] -> TypeEnv -> TypeEnv
+appendLocal t = over locals (t:)
+appendGlobal :: String -> Scheme -> TypeEnv -> TypeEnv
+appendGlobal k v = over globals (Map.insert k v)
 
 type Subst = Map.Map TVar Type
 
@@ -88,11 +89,11 @@ instance Substitutable TypeEnv where
 compose :: Subst -> Subst -> Subst
 s1 `compose` s2 = Map.map (apply s1) s2 `Map.union` s1
 
-newtype Unique = Unique Int
+newtype Unique = Unique { _unique :: Int }
+makeLenses ''Unique
+
 initUnique :: Unique
 initUnique = Unique 0
-incrUnique :: Unique -> Unique
-incrUnique (Unique i) = Unique $ i + 1
 
 type EvalEnv = Map.Map String Type
 initEvalEnv :: EvalEnv
@@ -122,10 +123,7 @@ runInfer m = case evalState (runReaderT (runExceptT m) initInferReader) initUniq
   Right a  -> Right a
 
 fresh :: Level -> Infer Type
-fresh level = do
-  (Unique i) <- get
-  modify incrUnique
-  return $ Variable i level
+fresh level = unique += 1 >> uses unique (flip Variable level)
 
 freshFree :: Infer Type
 freshFree = fresh =<< asks (Free . view letLevel)
@@ -134,27 +132,25 @@ freshBound :: Infer Type
 freshBound = fresh Bound
 
 findParam :: Int -> Infer Type
-findParam i = asks (flip lookupParam i . view typeEnv)
+findParam i = asks (lookupParam i . view typeEnv)
 
 findLocal :: N.LetIndex -> Infer Scheme
-findLocal (N.LetIndex _ local inner) = asks (flip3 lookupLocal local inner . view typeEnv)
+findLocal (N.LetIndex _ local inner) = asks (lookupLocal local inner . view typeEnv)
 
 findGlobal :: String -> Infer Scheme
-findGlobal s = do
-  env <- view typeEnv
-  maybe (throwError $ UnboundVariable s) return $ lookupGlobal env s
+findGlobal s = fromMaybeM (throwError $ UnboundVariable s) $ lookupGlobal s <$> view typeEnv
 
 withParam :: Type -> Infer a -> Infer a
-withParam = local . over typeEnv . flip appendParam
+withParam = local . over typeEnv . appendParam
 
 withGlobal :: String -> Scheme -> Infer a -> Infer a
-withGlobal name = local . over typeEnv . flip3 appendGlobal name
+withGlobal name = local . over typeEnv . appendGlobal name
 
 withSubst :: Subst -> Infer a -> Infer a
 withSubst = local . over typeEnv . apply
 
 withLocals :: [Scheme] -> Infer a -> Infer a
-withLocals = local . over typeEnv . flip appendLocal
+withLocals = local . over typeEnv . appendLocal
 
 pushLevel :: Infer a -> Infer a
 pushLevel = local $ over letLevel succ
