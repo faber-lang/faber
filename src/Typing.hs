@@ -1,5 +1,8 @@
+{-# LANGUAGE TemplateHaskell #-}
+
 module Typing where
 
+import           Control.Lens         hiding (Level)
 import           Control.Monad.Except
 import           Control.Monad.Extra  (fromMaybeM, maybeM)
 import           Control.Monad.Reader
@@ -91,7 +94,20 @@ initUnique = Unique 0
 incrUnique :: Unique -> Unique
 incrUnique (Unique i) = Unique $ i + 1
 
-type Infer = ExceptT TypeError (ReaderT (TypeEnv, Int) (State Unique))
+type EvalEnv = Map.Map String Type
+initEvalEnv :: EvalEnv
+initEvalEnv = Map.fromList [("Int", Integer)]
+
+data InferReader =
+  InferReader { _typeEnv  :: TypeEnv
+              , _letLevel :: Int
+              , _evalEnv  :: EvalEnv }
+makeLenses ''InferReader
+
+initInferReader :: InferReader
+initInferReader = InferReader initEnv 0 initEvalEnv
+
+type Infer = ExceptT TypeError (ReaderT InferReader (State Unique))
 
 data TypeError
   = UnificationFail Type Type
@@ -101,7 +117,7 @@ data TypeError
   deriving (Show, Eq)
 
 runInfer :: Infer a -> Either TypeError a
-runInfer m = case evalState (runReaderT (runExceptT m) (initEnv, 0)) initUnique of
+runInfer m = case evalState (runReaderT (runExceptT m) initInferReader) initUnique of
   Left err -> Left err
   Right a  -> Right a
 
@@ -112,40 +128,36 @@ fresh level = do
   return $ Variable i level
 
 freshFree :: Infer Type
-freshFree = fresh =<< asks (Free . snd)
+freshFree = fresh =<< asks (Free . view letLevel)
 
 freshBound :: Infer Type
 freshBound = fresh Bound
 
 findParam :: Int -> Infer Type
-findParam i = do
-  (env, _) <- ask
-  return $ lookupParam env i
+findParam i = asks (flip lookupParam i . view typeEnv)
 
 findLocal :: N.LetIndex -> Infer Scheme
-findLocal (N.LetIndex _ local inner) = do
-  (env, _) <- ask
-  return $ lookupLocal env local inner
+findLocal (N.LetIndex _ local inner) = asks (flip3 lookupLocal local inner . view typeEnv)
 
 findGlobal :: String -> Infer Scheme
 findGlobal s = do
-  (env, _) <- ask
+  env <- view typeEnv
   maybe (throwError $ UnboundVariable s) return $ lookupGlobal env s
 
 withParam :: Type -> Infer a -> Infer a
-withParam = local . first . flip appendParam
+withParam = local . over typeEnv . flip appendParam
 
 withGlobal :: String -> Scheme -> Infer a -> Infer a
-withGlobal name = local . first . flip3 appendGlobal name
+withGlobal name = local . over typeEnv . flip3 appendGlobal name
 
 withSubst :: Subst -> Infer a -> Infer a
-withSubst = local . first . apply
+withSubst = local . over typeEnv . apply
 
 withLocals :: [Scheme] -> Infer a -> Infer a
-withLocals = local . first . flip appendLocal
+withLocals = local . over typeEnv . flip appendLocal
 
 pushLevel :: Infer a -> Infer a
-pushLevel = local $ second succ
+pushLevel = local $ over letLevel succ
 
 unify :: Type -> Type -> Infer Subst
 unify (Function a1 b1) (Function a2 b2) = do
@@ -188,7 +200,7 @@ generalizer (Function a b) = do
 generalizer Integer = return nullSubst
 generalizer (Tuple xs) = foldr compose nullSubst <$> mapM generalizer xs
 generalizer (Variable i (Free level)) = do
-  cLevel <- asks snd
+  cLevel <- view letLevel
   if cLevel < level
   then bind i =<< freshBound
   else return nullSubst
