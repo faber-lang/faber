@@ -249,10 +249,10 @@ inferExpr (N.LetIn annots defs body) = do
           inferExpr body
     return (s1 `compose` s2, ty)
   where
-    mapper annot = maybeM (Forall [] <$> freshFree) translateScheme $ return annot
+    mapper annot = maybeM (Forall [] <$> freshFree) evalScheme $ return annot
     zipper t = maybe (generalize t) (go t)
     go t1 annot = do
-      scheme <- translateScheme annot
+      scheme <- evalScheme annot
       let (Forall _ t2) = scheme
       -- we don't need the result of `unifyAnnot`
       -- see the comment below in inferDefs
@@ -286,7 +286,7 @@ inferExpr (N.NthOf n i e) = do
   return (s1 `compose` s2, apply s2 $ ts !! i)
 inferExpr (N.Error _) = (,) nullSubst <$> freshFree
 
-inferDefs :: Map.Map String Scheme -> [N.Def] -> Infer ()
+inferDefs :: Map.Map String Scheme -> [N.NameDef] -> Infer ()
 inferDefs sig defs = do
   filledSig <- Map.fromList <$> mapM mapper names
   (s, tys) <- foldr (collectNames filledSig) (pushLevel $ inferExprs bodies) names
@@ -305,28 +305,24 @@ inferDefs sig defs = do
 
 
 inferCode :: N.Code -> Infer ()
-inferCode (N.Code sig defs) = flip inferDefs defs =<< mapMapM translateScheme sig
+inferCode (N.Code sig _ defs) = flip inferDefs defs =<< mapMapM evalScheme sig
 
--- TODO: Refactoring
-type NameEnv = Map.Map String Type
+withNames :: Map.Map String Type -> Infer a -> Infer a
+withNames m = locally evalEnv (`Map.union` m)
 
-translateScheme :: P.TypeScheme -> Infer Scheme
-translateScheme = translateScheme' $ Map.fromList [("Int", Integer)]
-
-translateScheme' :: NameEnv -> P.TypeScheme -> Infer Scheme
-translateScheme' env (P.Forall as x) = do
+evalScheme :: P.TypeScheme -> Infer Scheme
+evalScheme (P.Forall as x) = do
   vars <- replicateM (length as) freshBound
-  let newEnv = env `Map.union` Map.fromList (zip as vars)
-  return $ Forall (map destruct vars) $ translateTyExpr newEnv x
+  Forall (map destruct vars) <$> withNames (Map.fromList $ zip as vars) (eval x)
   where
     destruct (Variable i _) = i
 
-translateTyExpr :: NameEnv -> P.TypeExpr -> Type
-translateTyExpr env (P.Ident x) = fromMaybe err $ Map.lookup x env
+eval :: P.TypeExpr -> Infer Type
+eval (P.Ident x) = views evalEnv $ fromMaybe err . Map.lookup x
   where
     err = error $ "unbound type identifier " ++ show x
-translateTyExpr env (P.Function a b) = Function (translateTyExpr env a) (translateTyExpr env b)
-translateTyExpr env (P.Product xs) = Tuple $ map (translateTyExpr env) xs
+eval (P.Function a b) = Function <$> eval a <*> eval b
+eval (P.Product xs) = Tuple <$> mapM eval xs
 
 typing :: N.Code -> Either TypeError ()
 typing = runInfer . inferCode

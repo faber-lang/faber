@@ -112,11 +112,11 @@ lazyExpr (N.If c t e)          = If (lazyExpr c) (lazyExpr t) (lazyExpr e)
 lazyExpr (N.NthOf _ i e)       = NthOf i $ lazyExpr e
 lazyExpr (N.Error err)         = Error err
 
-lazyDef :: N.Def -> Def
+lazyDef :: N.NameDef -> Def
 lazyDef (N.Name name body) = Name name $ lazify body
 
 lazy :: N.Code -> Code
-lazy (N.Code _ code) = Code defs entry
+lazy (N.Code _ _ code) = Code defs entry
   where
     defs = map lazyDef code
     entry = evalThunk (GlobalBound "main" 0)
