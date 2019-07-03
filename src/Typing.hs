@@ -95,26 +95,32 @@ instance Substitutable TypeEnv where
 compose :: Subst -> Subst -> Subst
 s1 `compose` s2 = Map.map (apply s1) s2 `Map.union` s1
 
-newtype Unique = Unique { _unique :: Int }
-makeLenses ''Unique
-
-initUnique :: Unique
-initUnique = Unique 0
-
 type EvalEnv = Map.Map String Type
 initEvalEnv :: EvalEnv
 initEvalEnv = Map.fromList [("Int", Integer)]
 
+type CtorEnv = Map.Map String (Type, Type)
+initCtorEnv :: CtorEnv
+initCtorEnv = Map.empty
+
 data InferReader =
   InferReader { _typeEnv  :: TypeEnv
-              , _letLevel :: Int
-              , _evalEnv  :: EvalEnv }
+              , _letLevel :: Int }
 makeLenses ''InferReader
 
 initInferReader :: InferReader
-initInferReader = InferReader initEnv 0 initEvalEnv
+initInferReader = InferReader initEnv 0
 
-type Infer = ExceptT TypeError (ReaderT InferReader (State Unique))
+data InferState =
+  InferState { _unique  :: Int
+             , _ctorEnv :: CtorEnv
+             , _evalEnv :: EvalEnv }
+makeLenses ''InferState
+
+initInferState :: InferState
+initInferState = InferState 0 initCtorEnv initEvalEnv
+
+type Infer = ExceptT TypeError (ReaderT InferReader (State InferState))
 
 data TypeError
   = UnificationFail Type Type
@@ -125,7 +131,7 @@ data TypeError
   deriving (Show, Eq)
 
 runInfer :: Infer a -> Either TypeError a
-runInfer m = case evalState (runReaderT (runExceptT m) initInferReader) initUnique of
+runInfer m = case evalState (runReaderT (runExceptT m) initInferReader) initInferState of
   Left err -> Left err
   Right a  -> Right a
 
@@ -323,24 +329,47 @@ inferDefs sig defs = do
       Just (Forall _ annot) -> void $ unifyAnnot annot ty
       Nothing               -> return ()
 
-
 inferCode :: N.Code -> Infer ()
-inferCode (N.Code sig _ defs) = flip inferDefs defs =<< mapMapM evalScheme sig
+inferCode (N.Code sig typeDefs defs) = do
+  defineTypes typeDefs
+  flip inferDefs defs =<< mapMapM evalScheme sig
+
+defineTypes :: [N.TypeDef] -> Infer ()
+defineTypes xs = withNames names' $ mapM_ defineOne xs
+  where
+    defineOne :: N.TypeDef -> Infer ()
+    defineOne (N.Variant name as ctors) = do
+      vars <- replicateM (length as) freshBound
+      let et = foldl Apply (Enum name) vars
+      withNames (Map.fromList $ zip as vars) $ mapM_ (defineCtor et) ctors
+    defineCtor :: Type -> (String, P.TypeExpr) -> Infer ()
+    defineCtor et (name, ty) = do
+      t <- evalType ty
+      ctorEnv %= Map.insert name (et, t)
+    extract (N.Variant name _ _) = name
+    names = map extract xs
+    names' = Map.fromList $ zip names $ map Enum names
 
 withNames :: Map.Map String Type -> Infer a -> Infer a
-withNames m = locally evalEnv (`Map.union` m)
+withNames m a = do
+  old <- use evalEnv
+  evalEnv %= flip Map.union m
+  r <- a
+  evalEnv .= old
+  return r
 
 evalScheme :: P.TypeScheme -> Infer Scheme
 evalScheme (P.Forall as x) = do
   vars <- replicateM (length as) freshBound
-  Forall (map destruct vars) <$> withNames (Map.fromList $ zip as vars) (eval x)
+  Forall (map destruct vars) <$> withNames (Map.fromList $ zip as vars) (evalType x)
   where
     destruct (Variable i _) = i
 
-eval :: P.TypeExpr -> Infer Type
-eval (P.Ident x) = fromMaybeM (throwError $ UnboundTypeIdentifier x) $ Map.lookup x <$> view evalEnv
-eval (P.Function a b) = Function <$> eval a <*> eval b
-eval (P.Product xs) = Tuple <$> mapM eval xs
+evalType :: P.TypeExpr -> Infer Type
+evalType (P.Ident x) = fromMaybeM (throwError $ UnboundTypeIdentifier x) $ Map.lookup x <$> use evalEnv
+evalType (P.Function a b) = Function <$> evalType a <*> evalType b
+evalType (P.Product xs) = Tuple <$> mapM evalType xs
+evalType (P.ApplyTy a b) = Apply <$> evalType a <*> evalType b
 
 typing :: N.Code -> Either TypeError ()
 typing = runInfer . inferCode
