@@ -115,6 +115,7 @@ data TypeError
   | RigidUnificationFail Int Type
   | InfiniteType Int Type
   | UnboundVariable String
+  | UnboundTypeIdentifier String
   deriving (Show, Eq)
 
 runInfer :: Infer a -> Either TypeError a
@@ -318,9 +319,7 @@ evalScheme (P.Forall as x) = do
     destruct (Variable i _) = i
 
 eval :: P.TypeExpr -> Infer Type
-eval (P.Ident x) = views evalEnv $ fromMaybe err . Map.lookup x
-  where
-    err = error $ "unbound type identifier " ++ show x
+eval (P.Ident x) = fromMaybeM (throwError $ UnboundTypeIdentifier x) $ Map.lookup x <$> view evalEnv
 eval (P.Function a b) = Function <$> eval a <*> eval b
 eval (P.Product xs) = Tuple <$> mapM eval xs
 
