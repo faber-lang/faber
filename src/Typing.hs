@@ -177,6 +177,7 @@ unify (Variable i _) t = bind i t
 unify t (Variable i _) = bind i t
 unify Integer Integer = return nullSubst
 unify (Tuple a) (Tuple b) = foldr compose nullSubst <$> zipWithM unify a b
+unify (Enum a) (Enum b) | a == b = return nullSubst
 unify (Apply a1 b1) (Apply a2 b2) = do
   s_a <- unify a1 a2
   s_b <- unify (apply s_a b1) (apply s_a b2)
@@ -194,6 +195,7 @@ unifyAnnot t (Variable i _) = bind i t
 unifyAnnot (Variable i _) t = throwError $ RigidUnificationFail i t
 unifyAnnot Integer Integer = return nullSubst
 unifyAnnot (Tuple a) (Tuple b) = foldr compose nullSubst <$> zipWithM unifyAnnot a b
+unifyAnnot (Enum a) (Enum b) | a == b = return nullSubst
 unifyAnnot (Apply a1 b1) (Apply a2 b2) = do
   s_a <- unifyAnnot a1 a2
   s_b <- unifyAnnot (apply s_a b1) (apply s_a b2)
