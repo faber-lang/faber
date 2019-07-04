@@ -1,9 +1,18 @@
 module Desugar where
 
-import           Data.Tuple.Extra (second)
-import qualified Operators        as Op
-import           Parse            (TypeExpr (..), TypeScheme)
-import qualified Parse            as P
+import Data.Bifunctor (bimap)
+
+import qualified Operators as Op
+import           Parse     (TypeExpr (..), TypeScheme)
+import qualified Parse     as P
+
+data Pattern
+  = PVar String
+  | PWildcard
+  | PInt Int
+  | PCtor String Pattern
+  | PTuple [Pattern]
+  deriving (Show, Eq)
 
 data Expr
   = Integer Int
@@ -16,7 +25,7 @@ data Expr
   | Tuple [Expr]
   | LetIn [NameDef] Expr
   | If Expr Expr Expr
-  | Match Expr [(P.Pattern, Expr)]
+  | Match Expr [(Pattern, Expr)]
   deriving (Show, Eq)
 
 data NameDef
@@ -35,6 +44,13 @@ data Def
 
 type Code = [Def]
 
+desugarPattern :: P.Pattern -> Pattern
+desugarPattern (P.PVar name)     = PVar name
+desugarPattern P.PWildcard       = PWildcard
+desugarPattern (P.PInt i)        = PInt i
+desugarPattern (P.PTuple xs)     = PTuple $ map desugarPattern xs
+desugarPattern (P.PCtor name xs) = PCtor name $ desugarPattern $ P.PTuple xs
+
 desugarLambda :: [String] -> Expr -> Expr
 desugarLambda = flip $ foldr Lambda
 
@@ -48,7 +64,7 @@ desugarExpr (P.SingleOp op x)   = SingleOp op $ desugarExpr x
 desugarExpr (P.Tuple xs)        = Tuple $ map desugarExpr xs
 desugarExpr (P.LetIn defs x)    = LetIn (map desugarNameDef defs) $ desugarExpr x
 desugarExpr (P.If c t e)        = If (desugarExpr c) (desugarExpr t) (desugarExpr e)
-desugarExpr (P.Match t arms)    = Match (desugarExpr t) (map (second desugarExpr) arms)
+desugarExpr (P.Match t arms)    = Match (desugarExpr t) (map (bimap desugarPattern desugarExpr) arms)
 
 desugarNameDef :: P.NameDef -> NameDef
 desugarNameDef (P.NameDef name ps body []) = NameDef name $ desugarLambda ps $ desugarExpr body
