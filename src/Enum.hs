@@ -28,7 +28,19 @@ data Expr
   | Error Err.Error
   deriving (Show, Eq)
 
+data NameDef
+  = Name String Expr deriving (Show, Eq)
+
+data TypeDef
+  = Variant String [String] [(String, TypeExpr)]
+  deriving (Show, Eq)
+
+newtype Code = Code [NameDef] deriving (Show, Eq)
+
 type Convert = State (Map.Map String Int)
+
+runConvert :: Convert a -> a
+runConvert a = evalState a Map.empty
 
 convertExpr :: N.Expr -> Convert Expr
 convertExpr (N.ParamBound i)        = return $ ParamBound i
@@ -53,3 +65,26 @@ convertExpr (N.IsCtor name e)      = do
   e' <- convertExpr e
   return $ BinaryOp Op.Eq (NthOf 2 0 e') (Integer idx)
 convertExpr (N.DataOf _ e)         = NthOf 2 1 <$> convertExpr e
+
+convertCode :: N.Code -> Code
+convertCode (N.Code _ typeDefs nameDefs) = Code $ runConvert defs
+  where
+    defs = defineCtors typeDefs >> convertDefs nameDefs
+
+convertDefs :: [N.NameDef] -> Convert [NameDef]
+convertDefs = mapM convertDef
+
+convertDef :: N.NameDef -> Convert NameDef
+convertDef (N.Name name body) = Name name <$> convertExpr body
+
+defineCtors :: [N.TypeDef] -> Convert ()
+defineCtors = mapM_ defineCtor
+
+defineCtor :: N.TypeDef -> Convert ()
+defineCtor (N.Variant _ _ ctors) = zipWithM_ defineOne ctors [0..]
+  where
+    defineOne :: (String, TypeExpr) -> Int -> Convert ()
+    defineOne (name, _) idx = modify (Map.insert name idx)
+
+convertEnum :: N.Code -> Code
+convertEnum = convertCode
