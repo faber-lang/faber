@@ -1,9 +1,10 @@
 module Match where
 
+import           Desugar   (Pattern (..))
 import qualified Desugar   as D
 import qualified Errors    as Err
 import qualified Operators as Op
-import           Parse     (Pattern (..), TypeExpr, TypeScheme)
+import           Parse     (TypeExpr, TypeScheme)
 
 data Expr
   = Integer Int
@@ -17,6 +18,8 @@ data Expr
   | LetIn [NameDef] Expr
   | If Expr Expr Expr
   | NthOf Int Int Expr
+  | IsCtor String Expr
+  | DataOf Expr
   | Error Err.Error
   deriving (Show, Eq)
 
@@ -43,8 +46,10 @@ convertPattern d fallback target pat expr = localLet target $ case pat of
   PWildcard -> expr
   PInt i    -> If (BinaryOp Op.Eq target' $ Integer i) expr fallback
   PTuple ps -> foldr (folder $ length ps) expr (zip ps [0..])
+  PCtor n p -> If (IsCtor n target') (convPat' (DataOf target') p expr) fallback
   where
-    folder len (x, idx) = convertPattern (d+1) fallback (NthOf len idx target') x
+    convPat' = convertPattern (d+1) fallback
+    folder len (x, idx) = convPat' (NthOf len idx target') x
     bName = "_match" ++ show d
     localLet a = LetIn [NameDef bName a]
     target' = Variable bName
