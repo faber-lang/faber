@@ -12,7 +12,6 @@ import           Utils
 data Expr
   = Integer Int
   | Lambda Expr
-  | CtorApp String Expr
   | Apply Expr Expr
   | ParamBound Int
   | LetBound N.LetIndex
@@ -23,8 +22,6 @@ data Expr
   | LetIn [Maybe TypeScheme] [Expr] Expr
   | If Expr Expr Expr
   | NthOf Int Int Expr
-  | IsCtor String Expr
-  | DataOf String Expr
   | Error Err.Error
   deriving (Show, Eq)
 
