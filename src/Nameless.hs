@@ -36,6 +36,8 @@ data Expr
   | LetIn [Maybe TypeScheme] [Expr] Expr
   | If Expr Expr Expr
   | NthOf Int Int Expr
+  | IsCtor String Expr
+  | DataOf String Expr
   | Error Err.Error
   deriving (Show, Eq)
 
@@ -124,6 +126,8 @@ namelessExpr (M.SingleOp op x) = SingleOp op <$> namelessExpr x
 namelessExpr (M.Tuple xs) = Tuple <$> mapM namelessExpr xs
 namelessExpr (M.If c t e) = If <$> namelessExpr c <*> namelessExpr t <*> namelessExpr e
 namelessExpr (M.NthOf n i e) = NthOf n i <$> namelessExpr e
+namelessExpr (M.IsCtor n e) = IsCtor n <$> namelessExpr e
+namelessExpr (M.DataOf n e) = DataOf n <$> namelessExpr e
 namelessExpr (M.Error err) = return $ Error err
 
 namelessNameDef :: M.Def -> Nameless (Maybe NameDef)

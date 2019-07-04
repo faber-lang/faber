@@ -19,7 +19,7 @@ data Expr
   | If Expr Expr Expr
   | NthOf Int Int Expr
   | IsCtor String Expr
-  | DataOf Expr
+  | DataOf String Expr
   | Error Err.Error
   deriving (Show, Eq)
 
@@ -46,7 +46,7 @@ convertPattern d fallback target pat expr = localLet target $ case pat of
   PWildcard -> expr
   PInt i    -> If (BinaryOp Op.Eq target' $ Integer i) expr fallback
   PTuple ps -> foldr (folder $ length ps) expr (zip ps [0..])
-  PCtor n p -> If (IsCtor n target') (convPat' (DataOf target') p expr) fallback
+  PCtor n p -> If (IsCtor n target') (convPat' (DataOf n target') p expr) fallback
   where
     convPat' = convertPattern (d+1) fallback
     folder len (x, idx) = convPat' (NthOf len idx target') x

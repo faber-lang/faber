@@ -316,6 +316,16 @@ inferExpr (N.CtorApp name e) = do
   (tr, tp) <- uses ctorEnv (Map.! name)
   s2 <- unify t1 (apply s1 tp)
   return (s1 `compose` s2, apply s2 tr)
+inferExpr (N.DataOf name e) = do
+  (s1, t1) <- inferExpr e
+  (tr, tp) <- uses ctorEnv (Map.! name)
+  s2 <- unify t1 (apply s1 tr)
+  return (s1 `compose` s2, apply s2 tp)
+inferExpr (N.IsCtor name e) = do
+  (s1, t1) <- inferExpr e
+  (tr, tp) <- uses ctorEnv (Map.! name)
+  s2 <- unify t1 (apply s1 tr)
+  return (s1 `compose` s2, Integer)  -- TODO: Bool
 
 inferDefs :: Map.Map String Scheme -> [N.NameDef] -> Infer ()
 inferDefs sig defs = do
