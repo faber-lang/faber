@@ -19,6 +19,7 @@ data Pattern
   = PVar Ident
   | PWildcard
   | PInt Int
+  | PCtor String [Pattern]
   | PTuple [Pattern]
   deriving (Show, Eq)
 
@@ -119,10 +120,14 @@ patWildcard = symbol "_" >> return PWildcard
 patTuple :: Parser Pattern
 patTuple = PTuple <$> parens (pattern_ `sepEndBy` symbol ",")
 
+patCtor :: Parser Pattern
+patCtor = PCtor <$> (symbol "#" >> identifier) <*> many pattern_
+
 pattern_ :: Parser Pattern
 pattern_ = try (parens pattern_)
   <|> patTuple
   <|> patWildcard
+  <|> patCtor
   <|> PVar <$> patIdentifier
   <|> PInt <$> integer
 
