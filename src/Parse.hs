@@ -205,8 +205,11 @@ typeIdentifier = identifier' typeRws
 
 typeOperators :: [[Operator Parser TypeExpr]]
 typeOperators =
-  [ [ InfixL (ApplyTy <$ symbol "") ],
-    [ InfixR (Function <$ symbol "->") ] ]
+  [ InfixL (ApplyTy <$ symbol "") ] : typeOperatorsNoApp
+
+typeOperatorsNoApp :: [[Operator Parser TypeExpr]]
+typeOperatorsNoApp =
+  [ [ InfixR (Function <$ symbol "->") ] ]
 
 typeProd :: Parser TypeExpr
 typeProd = Product <$> parens (typeExpr `sepEndBy` symbol ",")
@@ -218,6 +221,9 @@ typeTerm = try (parens typeExpr)
 
 typeExpr :: Parser TypeExpr
 typeExpr = makeExprParser typeTerm typeOperators
+
+typeExprNoApp :: Parser TypeExpr
+typeExprNoApp = makeExprParser typeTerm typeOperatorsNoApp
 
 -- type scheme parser
 typeScheme :: Parser TypeScheme
@@ -273,7 +279,8 @@ defType = delim >> body
       Type name vars . Variant <$> variant `sepBy1` symbol "|"
     variant = do
       ctor <- identifier
-      params <- many typeExpr
+      -- Cons a (List a) should be parsed as [a, ApplyTy List a], not [ApplyTy a (ApplyTy List a)]
+      params <- many typeExprNoApp
       return (ctor, params)
 
 definition :: Parser Def
