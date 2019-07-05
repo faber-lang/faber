@@ -1,0 +1,18 @@
+type t
+  = N Int
+  | Add t t
+  | Mul t t
+  | Sub t t
+
+name calc v =
+  match v with
+  | #N i -> i
+  | #Add a b -> calc a + calc b
+  | #Mul a b -> calc a * calc b
+  | #Sub a b -> calc a - calc b
+
+name main = calc t1 + succ (calc t2)
+  where
+  - t1 = Mul (Add (N 3) (N 5)) (Mul (N 2) (N 4))
+  - t2 = Sub (N 5) (Mul (N 1) (N 2))
+  - succ x = calc (Add (N 1) (N x))

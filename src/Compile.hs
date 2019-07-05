@@ -3,6 +3,7 @@ module Compile where
 import qualified Closure  as Fab
 import qualified Codegen  as Fab
 import qualified Desugar  as Fab
+import qualified Enum     as Fab
 import qualified Flatten  as Fab
 import qualified Hoist    as Fab
 import qualified Lazy     as Fab
@@ -31,7 +32,7 @@ compileToModule filename source = do
   return $ conv2 ir
   where
     conv1 = Fab.nameless . Fab.convertMatch . Fab.desugar
-    conv2 = Fab.codegen . Fab.hoist . Fab.closure . Fab.flatten . Fab.lazy
+    conv2 = Fab.codegen . Fab.hoist . Fab.closure . Fab.flatten . Fab.lazy . Fab.convertEnum
 
 moduleToLLVMAssembly :: LLVMAST.Module -> IO ByteString
 moduleToLLVMAssembly m = LLVM.withContext $ \ctx -> LLVM.withModuleFromAST ctx m LLVM.moduleLLVMAssembly

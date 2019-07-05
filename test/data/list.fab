@@ -1,0 +1,27 @@
+type List a = Nil | Cons a (List a)
+
+name iota :: List Int
+name iota = gen 1
+  where
+    gen i = Cons i (gen (i + 1))
+
+name take :: forall a. Int -> List a -> List a
+name take n l =
+  match (n, l) with
+  | (0, _) -> Nil
+  | (n, #Cons x xs) -> Cons x (take (n - 1) xs)
+
+name pow :: Int -> Int -> Int
+name pow i n =
+  match n with
+  | 0 -> 1
+  | n -> i * pow i (n - 1)
+
+name printLint :: List Int -> Int -> Int
+name printList l i =
+  match l with
+  | #Nil -> 0
+  | #Cons x xs -> (x * pow 10 i) + printList xs (i + 1)
+
+name main :: Int
+name main = printList (take 9 iota) 0

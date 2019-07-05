@@ -1,5 +1,8 @@
+{-# LANGUAGE TemplateHaskell #-}
+
 module Typing where
 
+import           Control.Lens         hiding (Level)
 import           Control.Monad.Except
 import           Control.Monad.Extra  (fromMaybeM, maybeM)
 import           Control.Monad.Reader
@@ -25,30 +28,33 @@ data Type
   = Integer
   | Function Type Type
   | Variable TVar Level
+  | Apply Type Type
+  | Enum String
   | Tuple [Type]
   deriving (Show, Eq)
 
 data Scheme = Forall [TVar] Type
 
 data TypeEnv =
-  TypeEnv { params  :: [Type]
-          , locals  :: [[Scheme]]
-          , globals :: Map.Map String Scheme }
+  TypeEnv { _params  :: [Type]
+          , _locals  :: [[Scheme]]
+          , _globals :: Map.Map String Scheme }
+makeLenses ''TypeEnv
 
 initEnv :: TypeEnv
 initEnv = TypeEnv [] [] Map.empty
-lookupParam :: TypeEnv -> Int -> Type
-lookupParam (TypeEnv env _ _)  = (env !!)
-lookupLocal :: TypeEnv -> Int -> Int -> Scheme
-lookupLocal (TypeEnv _ env _)  = (!!) . (env !!)
-lookupGlobal :: TypeEnv -> String -> Maybe Scheme
-lookupGlobal (TypeEnv _ _ env) = flip Map.lookup env
-appendParam :: TypeEnv -> Type -> TypeEnv
-appendParam (TypeEnv ps ls gs) t = TypeEnv (t:ps) ls gs
-appendLocal :: TypeEnv -> [Scheme] -> TypeEnv
-appendLocal (TypeEnv ps ls gs) t = TypeEnv ps (t:ls) gs
-appendGlobal :: TypeEnv -> String -> Scheme -> TypeEnv
-appendGlobal (TypeEnv ps ls gs) k v = TypeEnv ps ls $ Map.insert k v gs
+lookupParam :: Int -> TypeEnv -> Type
+lookupParam i = views params (!! i)
+lookupLocal :: Int -> Int -> TypeEnv -> Scheme
+lookupLocal i1 i2  = views locals ((!! i2) . (!! i1))
+lookupGlobal :: String -> TypeEnv -> Maybe Scheme
+lookupGlobal name = views globals (Map.lookup name)
+appendParam :: Type -> TypeEnv -> TypeEnv
+appendParam t = over params (t:)
+appendLocal :: [Scheme] -> TypeEnv -> TypeEnv
+appendLocal t = over locals (t:)
+appendGlobal :: String -> Scheme -> TypeEnv -> TypeEnv
+appendGlobal k v = over globals (Map.insert k v)
 
 type Subst = Map.Map TVar Type
 
@@ -62,13 +68,17 @@ class Substitutable a where
 instance Substitutable Type where
   apply s t@(Variable i _) = Map.findWithDefault t i s
   apply s (Function a b)   = Function (apply s a) (apply s b)
+  apply s (Apply a b)      = Apply (apply s a) (apply s b)
   apply s (Tuple xs)       = Tuple $ apply s xs
-  apply s Integer          = Integer
+  apply _ Integer          = Integer
+  apply _ (Enum n)         = Enum n
 
   ftv (Function a b) = ftv a `Set.union` ftv b
+  ftv (Apply a b)    = ftv a `Set.union` ftv b
   ftv (Variable i _) = Set.singleton i
   ftv (Tuple xs)     = ftv xs
   ftv Integer        = Set.empty
+  ftv (Enum _)       = Set.empty
 
 instance Substitutable Scheme where
   apply s (Forall as t) = Forall as $ apply (foldr Map.delete s as) t
@@ -85,67 +95,78 @@ instance Substitutable TypeEnv where
 compose :: Subst -> Subst -> Subst
 s1 `compose` s2 = Map.map (apply s1) s2 `Map.union` s1
 
-newtype Unique = Unique Int
-initUnique :: Unique
-initUnique = Unique 0
-incrUnique :: Unique -> Unique
-incrUnique (Unique i) = Unique $ i + 1
+type EvalEnv = Map.Map String Type
+initEvalEnv :: EvalEnv
+initEvalEnv = Map.fromList [("Int", Integer)]
 
-type Infer = ExceptT TypeError (ReaderT (TypeEnv, Int) (State Unique))
+type CtorEnv = Map.Map String Scheme
+initCtorEnv :: CtorEnv
+initCtorEnv = Map.empty
+
+data InferReader =
+  InferReader { _typeEnv  :: TypeEnv
+              , _letLevel :: Int }
+makeLenses ''InferReader
+
+initInferReader :: InferReader
+initInferReader = InferReader initEnv 0
+
+data InferState =
+  InferState { _unique  :: Int
+             , _ctorEnv :: CtorEnv
+             , _evalEnv :: EvalEnv }
+makeLenses ''InferState
+
+initInferState :: InferState
+initInferState = InferState 0 initCtorEnv initEvalEnv
+
+type Infer = ExceptT TypeError (ReaderT InferReader (State InferState))
 
 data TypeError
   = UnificationFail Type Type
   | RigidUnificationFail Int Type
   | InfiniteType Int Type
   | UnboundVariable String
+  | UnboundTypeIdentifier String
   deriving (Show, Eq)
 
 runInfer :: Infer a -> Either TypeError a
-runInfer m = case evalState (runReaderT (runExceptT m) (initEnv, 0)) initUnique of
+runInfer m = case evalState (runReaderT (runExceptT m) initInferReader) initInferState of
   Left err -> Left err
   Right a  -> Right a
 
 fresh :: Level -> Infer Type
-fresh level = do
-  (Unique i) <- get
-  modify incrUnique
-  return $ Variable i level
+fresh level = unique += 1 >> uses unique (flip Variable level)
 
 freshFree :: Infer Type
-freshFree = fresh =<< asks (Free . snd)
+freshFree = fresh =<< views letLevel Free
 
 freshBound :: Infer Type
 freshBound = fresh Bound
 
 findParam :: Int -> Infer Type
-findParam i = do
-  (env, _) <- ask
-  return $ lookupParam env i
+findParam i = views typeEnv (lookupParam i)
 
 findLocal :: N.LetIndex -> Infer Scheme
-findLocal (N.LetIndex _ local inner) = do
-  (env, _) <- ask
-  return $ lookupLocal env local inner
+findLocal (N.LetIndex _ local inner) = views typeEnv (lookupLocal local inner)
 
 findGlobal :: String -> Infer Scheme
-findGlobal s = do
-  (env, _) <- ask
-  maybe (throwError $ UnboundVariable s) return $ lookupGlobal env s
+findGlobal s = fromMaybeM (throwError $ UnboundVariable s) $ lookupGlobal s <$> view typeEnv
 
 withParam :: Type -> Infer a -> Infer a
-withParam = local . first . flip appendParam
+withParam = locally typeEnv . appendParam
 
 withGlobal :: String -> Scheme -> Infer a -> Infer a
-withGlobal name = local . first . flip3 appendGlobal name
+withGlobal name = locally typeEnv . appendGlobal name
 
 withSubst :: Subst -> Infer a -> Infer a
-withSubst = local . first . apply
+withSubst = locally typeEnv . apply
 
 withLocals :: [Scheme] -> Infer a -> Infer a
-withLocals = local . first . flip appendLocal
+withLocals = locally typeEnv . appendLocal
 
 pushLevel :: Infer a -> Infer a
-pushLevel = local $ second succ
+pushLevel = locally letLevel succ
 
 unify :: Type -> Type -> Infer Subst
 unify (Function a1 b1) (Function a2 b2) = do
@@ -156,6 +177,11 @@ unify (Variable i _) t = bind i t
 unify t (Variable i _) = bind i t
 unify Integer Integer = return nullSubst
 unify (Tuple a) (Tuple b) = foldr compose nullSubst <$> zipWithM unify a b
+unify (Enum a) (Enum b) | a == b = return nullSubst
+unify (Apply a1 b1) (Apply a2 b2) = do
+  s_a <- unify a1 a2
+  s_b <- unify (apply s_a b1) (apply s_a b2)
+  return $ s_a `compose` s_b
 unify t1 t2 = throwError $ UnificationFail t1 t2
 
 -- annot -> ty -> subst
@@ -169,6 +195,11 @@ unifyAnnot t (Variable i _) = bind i t
 unifyAnnot (Variable i _) t = throwError $ RigidUnificationFail i t
 unifyAnnot Integer Integer = return nullSubst
 unifyAnnot (Tuple a) (Tuple b) = foldr compose nullSubst <$> zipWithM unifyAnnot a b
+unifyAnnot (Enum a) (Enum b) | a == b = return nullSubst
+unifyAnnot (Apply a1 b1) (Apply a2 b2) = do
+  s_a <- unifyAnnot a1 a2
+  s_b <- unifyAnnot (apply s_a b1) (apply s_a b2)
+  return $ s_a `compose` s_b
 unifyAnnot t1 t2 = throwError $ UnificationFail t1 t2
 
 bind :: Int -> Type -> Infer Subst
@@ -185,10 +216,15 @@ generalizer (Function a b) = do
   s1 <- generalizer a
   s2 <- generalizer (apply s1 b)
   return $ s1 `compose` s2
+generalizer (Apply a b) = do
+  s1 <- generalizer a
+  s2 <- generalizer (apply s1 b)
+  return $ s1 `compose` s2
 generalizer Integer = return nullSubst
+generalizer (Enum _) = return nullSubst
 generalizer (Tuple xs) = foldr compose nullSubst <$> mapM generalizer xs
 generalizer (Variable i (Free level)) = do
-  cLevel <- asks snd
+  cLevel <- view letLevel
   if cLevel < level
   then bind i =<< freshBound
   else return nullSubst
@@ -241,10 +277,10 @@ inferExpr (N.LetIn annots defs body) = do
           inferExpr body
     return (s1 `compose` s2, ty)
   where
-    mapper annot = maybeM (Forall [] <$> freshFree) translateScheme $ return annot
+    mapper annot = maybeM (Forall [] <$> freshFree) evalScheme $ return annot
     zipper t = maybe (generalize t) (go t)
     go t1 annot = do
-      scheme <- translateScheme annot
+      scheme <- evalScheme annot
       let (Forall _ t2) = scheme
       -- we don't need the result of `unifyAnnot`
       -- see the comment below in inferDefs
@@ -277,8 +313,26 @@ inferExpr (N.NthOf n i e) = do
   s2 <- unify (Tuple ts) t2
   return (s1 `compose` s2, apply s2 $ ts !! i)
 inferExpr (N.Error _) = (,) nullSubst <$> freshFree
+inferExpr (N.CtorApp name e) = do
+  tv <- freshFree
+  t1 <- instantiate =<< uses ctorEnv (Map.! name)
+  (s1, t2) <- inferExpr e
+  s2 <- unify t1 (Function t2 tv)
+  return (s2 `compose` s1, apply s2 tv)
+inferExpr (N.DataOf name e) = do
+  tv <- freshFree
+  t1 <- instantiate =<< uses ctorEnv (Map.! name)
+  (s1, t2) <- inferExpr e
+  s2 <- unify t1 (Function tv t2)
+  return (s1 `compose` s2, apply s2 tv)
+inferExpr (N.IsCtor name e) = do
+  tv <- freshFree
+  t1 <- instantiate =<< uses ctorEnv (Map.! name)
+  (s1, t2) <- inferExpr e
+  s2 <- unify t1 (Function tv t2)
+  return (s1 `compose` s2, Integer)  -- TODO: Bool
 
-inferDefs :: Map.Map String Scheme -> [N.Def] -> Infer ()
+inferDefs :: Map.Map String Scheme -> [N.NameDef] -> Infer ()
 inferDefs sig defs = do
   filledSig <- Map.fromList <$> mapM mapper names
   (s, tys) <- foldr (collectNames filledSig) (pushLevel $ inferExprs bodies) names
@@ -295,30 +349,51 @@ inferDefs sig defs = do
       Just (Forall _ annot) -> void $ unifyAnnot annot ty
       Nothing               -> return ()
 
-
 inferCode :: N.Code -> Infer ()
-inferCode (N.Code sig defs) = flip inferDefs defs =<< mapMapM translateScheme sig
+inferCode (N.Code sig typeDefs defs) = do
+  defineTypes typeDefs
+  flip inferDefs defs =<< mapMapM evalScheme sig
 
--- TODO: Refactoring
-type NameEnv = Map.Map String Type
+defineTypes :: [N.TypeDef] -> Infer ()
+defineTypes xs = do
+  evalEnv %= flip Map.union names'
+  mapM_ defineOne xs
+  where
+    defineOne :: N.TypeDef -> Infer ()
+    defineOne (N.Variant name as ctors) = do
+      vars <- replicateM (length as) freshBound
+      let et = foldl Apply (Enum name) vars
+      let tvs = map extractVar vars
+      withNames (Map.fromList $ zip as vars) $ mapM_ (defineCtor tvs et) ctors
+    defineCtor :: [TVar] -> Type -> (String, P.TypeExpr) -> Infer ()
+    defineCtor vars et (name, ty) = do
+      t <- evalType ty
+      ctorEnv %= Map.insert name (Forall vars $ Function t et)
+    extractVar (Variable i _) = i
+    extract (N.Variant name _ _) = name
+    names = map extract xs
+    names' = Map.fromList $ zip names $ map Enum names
 
-translateScheme :: P.TypeScheme -> Infer Scheme
-translateScheme = translateScheme' $ Map.fromList [("Int", Integer)]
+withNames :: Map.Map String Type -> Infer a -> Infer a
+withNames m a = do
+  old <- use evalEnv
+  evalEnv %= flip Map.union m
+  r <- a
+  evalEnv .= old
+  return r
 
-translateScheme' :: NameEnv -> P.TypeScheme -> Infer Scheme
-translateScheme' env (P.Forall as x) = do
+evalScheme :: P.TypeScheme -> Infer Scheme
+evalScheme (P.Forall as x) = do
   vars <- replicateM (length as) freshBound
-  let newEnv = env `Map.union` Map.fromList (zip as vars)
-  return $ Forall (map destruct vars) $ translateTyExpr newEnv x
+  Forall (map destruct vars) <$> withNames (Map.fromList $ zip as vars) (evalType x)
   where
     destruct (Variable i _) = i
 
-translateTyExpr :: NameEnv -> P.TypeExpr -> Type
-translateTyExpr env (P.Ident x) = fromMaybe err $ Map.lookup x env
-  where
-    err = error $ "unbound type identifier " ++ show x
-translateTyExpr env (P.Function a b) = Function (translateTyExpr env a) (translateTyExpr env b)
-translateTyExpr env (P.Product xs) = Tuple $ map (translateTyExpr env) xs
+evalType :: P.TypeExpr -> Infer Type
+evalType (P.Ident x) = fromMaybeM (throwError $ UnboundTypeIdentifier x) $ Map.lookup x <$> use evalEnv
+evalType (P.Function a b) = Function <$> evalType a <*> evalType b
+evalType (P.Product xs) = Tuple <$> mapM evalType xs
+evalType (P.ApplyTy a b) = Apply <$> evalType a <*> evalType b
 
 typing :: N.Code -> Either TypeError ()
 typing = runInfer . inferCode

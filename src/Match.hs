@@ -1,13 +1,15 @@
 module Match where
 
+import           Desugar   (Pattern (..))
 import qualified Desugar   as D
 import qualified Errors    as Err
 import qualified Operators as Op
-import           Parse     (Pattern (..), TypeScheme)
+import           Parse     (TypeExpr, TypeScheme)
 
 data Expr
   = Integer Int
   | Lambda String Expr
+  | CtorApp String Expr
   | Apply Expr Expr
   | Variable String
   | BinaryOp Op.BinaryOp Expr Expr
@@ -16,6 +18,8 @@ data Expr
   | LetIn [NameDef] Expr
   | If Expr Expr Expr
   | NthOf Int Int Expr
+  | IsCtor String Expr
+  | DataOf String Expr
   | Error Err.Error
   deriving (Show, Eq)
 
@@ -24,7 +28,14 @@ data NameDef
   | TypeAnnot String TypeScheme
   deriving (Show, Eq)
 
-newtype Def = Name NameDef deriving (Show, Eq)
+newtype TypeDef
+  = Variant [(String, TypeExpr)]
+  deriving (Show, Eq)
+
+data Def
+  = Name NameDef
+  | Type String [String] TypeDef
+  deriving (Show, Eq)
 
 type Code = [Def]
 
@@ -35,8 +46,10 @@ convertPattern d fallback target pat expr = localLet target $ case pat of
   PWildcard -> expr
   PInt i    -> If (BinaryOp Op.Eq target' $ Integer i) expr fallback
   PTuple ps -> foldr (folder $ length ps) expr (zip ps [0..])
+  PCtor n p -> If (IsCtor n target') (convPat' (DataOf n target') p expr) fallback
   where
-    folder len (x, idx) = convertPattern (d+1) fallback (NthOf len idx target') x
+    convPat' = convertPattern (d+1) fallback
+    folder len (x, idx) = convPat' (NthOf len idx target') x
     bName = "_match" ++ show d
     localLet a = LetIn [NameDef bName a]
     target' = Variable bName
@@ -47,6 +60,7 @@ runConvertPattern = convertPattern 0
 convertExpr :: D.Expr -> Expr
 convertExpr (D.Apply fn arg) = Apply (convertExpr fn) (convertExpr arg)
 convertExpr (D.Lambda p body) = Lambda p $ convertExpr body
+convertExpr (D.CtorApp name e) = CtorApp name $ convertExpr e
 convertExpr (D.LetIn defs body) = LetIn (map go defs) (convertExpr body)
   where
     go (D.NameDef name expr)     = NameDef name $ convertExpr expr
@@ -65,6 +79,7 @@ convertExpr (D.Match target arms) = matcher (convertExpr target) arms
 convertDef :: D.Def -> Def
 convertDef (D.Name (D.NameDef name expr)) = Name (NameDef name $ convertExpr expr)
 convertDef (D.Name (D.TypeAnnot name scheme)) = Name (TypeAnnot name scheme)
+convertDef (D.Type name vars (D.Variant xs)) = Type name vars $ Variant xs
 
 convertCode :: D.Code -> Code
 convertCode = map convertDef

@@ -180,10 +180,10 @@ genExpr (If c t e) = mdo
   IR.load res 0
 
 genExpr (Error err) = do
-  puts <- IR.extern "puts" [Ty.ptr Ty.i8] Ty.i32
+  let puts = namedFunction (Ty.FunctionType Ty.i32 [Ty.ptr Ty.i8] False) "puts"
   msg <- IR.globalStringPtr (Err.message err) "err"
   _ <- IR.call puts [(msg, [])]
-  exit <- IR.extern "exit" [Ty.i32] Ty.void
+  let exit = namedFunction (Ty.FunctionType Ty.void [Ty.i32] False) "exit"
   _ <- IR.call exit [(AST.ConstantOperand $ Const.Int 32 1, [])]
   IR.inttoptr (constInt 0) genericPtr
 
@@ -214,6 +214,8 @@ nameFunction i = "__faber_fn_" ++ show i
 codegen :: Module -> AST.Module
 codegen m = IR.buildModule "faber-output" $ do
   _ <- IR.extern "malloc" [Ty.i64] genericPtr
+  _ <- IR.extern "puts" [Ty.ptr Ty.i8] Ty.i32
+  _ <- IR.extern "exit" [Ty.i32] Ty.void
   zipWithM_ (genFunction . nameFunction) [0..] (functions m)
   IR.function "main" [(Ty.i32, "argc"), (Ty.ptr (Ty.ptr Ty.i8), "argv")] Ty.i32 $ \[_, _] -> do
     ret <- genCode $ code m

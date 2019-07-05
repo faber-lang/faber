@@ -19,6 +19,7 @@ data Pattern
   = PVar Ident
   | PWildcard
   | PInt Int
+  | PCtor String [Pattern]
   | PTuple [Pattern]
   deriving (Show, Eq)
 
@@ -39,6 +40,7 @@ data TypeExpr
   = Ident String
   | Function TypeExpr TypeExpr
   | Product [TypeExpr]
+  | ApplyTy TypeExpr TypeExpr
   deriving (Show, Eq)
 
 data TypeScheme
@@ -50,7 +52,14 @@ data NameDef
   | TypeAnnot String TypeScheme
   deriving (Show, Eq)
 
-newtype Def = Name NameDef deriving (Show, Eq)
+newtype TypeDef
+  = Variant [(String, [TypeExpr])]
+  deriving (Show, Eq)
+
+data Def
+  = Name NameDef
+  | Type String [String] TypeDef
+  deriving (Show, Eq)
 
 type Code = [Def]
 
@@ -59,7 +68,7 @@ type Parser = Parsec Void String
 
 -- lexer utils
 headRws :: [Parser ()]
-headRws = [char_ '-', string_ "name"]
+headRws = [char_ '-', string_ "name", string_ "type"]
   where
     char_   = void . C.char
     string_ = void . C.string
@@ -111,10 +120,14 @@ patWildcard = symbol "_" >> return PWildcard
 patTuple :: Parser Pattern
 patTuple = PTuple <$> parens (pattern_ `sepEndBy` symbol ",")
 
+patCtor :: Parser Pattern
+patCtor = PCtor <$> (symbol "#" >> identifier) <*> many pattern_
+
 pattern_ :: Parser Pattern
 pattern_ = try (parens pattern_)
   <|> patTuple
   <|> patWildcard
+  <|> patCtor
   <|> PVar <$> patIdentifier
   <|> PInt <$> integer
 
@@ -197,6 +210,10 @@ typeIdentifier = identifier' typeRws
 
 typeOperators :: [[Operator Parser TypeExpr]]
 typeOperators =
+  [ InfixL (ApplyTy <$ symbol "") ] : typeOperatorsNoApp
+
+typeOperatorsNoApp :: [[Operator Parser TypeExpr]]
+typeOperatorsNoApp =
   [ [ InfixR (Function <$ symbol "->") ] ]
 
 typeProd :: Parser TypeExpr
@@ -209,6 +226,9 @@ typeTerm = try (parens typeExpr)
 
 typeExpr :: Parser TypeExpr
 typeExpr = makeExprParser typeTerm typeOperators
+
+typeExprNoApp :: Parser TypeExpr
+typeExprNoApp = makeExprParser typeTerm typeOperatorsNoApp
 
 -- type scheme parser
 typeScheme :: Parser TypeScheme
@@ -247,10 +267,29 @@ nameDefs = many (optional hyphen >> nameDef)
   where
     hyphen = try (newline >> symbol "-")
 
-definition :: Parser Def
-definition = Name <$> (delim >> nameDef)
+defName :: Parser Def
+defName = Name <$> (delim >> nameDef)
   where
     delim = try (optional newline >> symbol "name")
+
+defType :: Parser Def
+defType = delim >> body
+  where
+    delim = try (optional newline >> symbol "type")
+    body = do
+      name <- identifier
+      vars <- many identifier
+      symbol "="
+      _ <- optional $ symbol "|"
+      Type name vars . Variant <$> variant `sepBy1` symbol "|"
+    variant = do
+      ctor <- identifier
+      -- Cons a (List a) should be parsed as [a, ApplyTy List a], not [ApplyTy a (ApplyTy List a)]
+      params <- many typeExprNoApp
+      return (ctor, params)
+
+definition :: Parser Def
+definition = defName <|> defType
 
 definitions :: Parser [Def]
 definitions = some definition

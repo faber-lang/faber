@@ -10,7 +10,7 @@ import qualified Data.Map             as Map
 import qualified Errors    as Err
 import qualified Match     as M
 import qualified Operators as Op
-import           Parse     (TypeScheme)
+import           Parse     (TypeExpr, TypeScheme)
 import           Utils
 
 data LetIndex =
@@ -25,6 +25,7 @@ mapLambdaIndex f (LetIndex lamI letI innI) = LetIndex (f lamI) letI innI
 data Expr
   = Integer Int
   | Lambda Expr
+  | CtorApp String Expr
   | Apply Expr Expr
   | ParamBound Int
   | LetBound LetIndex
@@ -35,12 +36,23 @@ data Expr
   | LetIn [Maybe TypeScheme] [Expr] Expr
   | If Expr Expr Expr
   | NthOf Int Int Expr
+  | IsCtor String Expr
+  | DataOf String Expr
   | Error Err.Error
   deriving (Show, Eq)
 
-data Def = Name String Expr deriving (Show, Eq)
+data NameDef
+  = Name String Expr deriving (Show, Eq)
 
-data Code = Code (Map.Map String TypeScheme) [Def] deriving (Show, Eq)
+data TypeDef
+  = Variant String [String] [(String, TypeExpr)]
+  deriving (Show, Eq)
+
+data Code =
+  Code { annotations :: (Map.Map String TypeScheme)
+       , typeDefs    :: [TypeDef]
+       , nameDefs    :: [NameDef] }
+       deriving (Show, Eq)
 
 -- types for the conversion
 data Binding
@@ -101,6 +113,7 @@ destructDefs defs = runState (foldrM f ([], []) defs) Map.empty
 namelessExpr :: M.Expr -> Nameless Expr
 namelessExpr (M.Apply fn arg) = Apply <$> namelessExpr fn <*> namelessExpr arg
 namelessExpr (M.Lambda p body) = Lambda <$> withBinding (Param p) (namelessExpr body)
+namelessExpr (M.CtorApp name e) = CtorApp name <$> namelessExpr e
 namelessExpr (M.LetIn defs body) = withBinding (Let names) $ LetIn schemes <$> bodies' <*> namelessExpr body
   where
     ((names, bodies), sig) = destructDefs defs
@@ -113,21 +126,26 @@ namelessExpr (M.SingleOp op x) = SingleOp op <$> namelessExpr x
 namelessExpr (M.Tuple xs) = Tuple <$> mapM namelessExpr xs
 namelessExpr (M.If c t e) = If <$> namelessExpr c <*> namelessExpr t <*> namelessExpr e
 namelessExpr (M.NthOf n i e) = NthOf n i <$> namelessExpr e
+namelessExpr (M.IsCtor n e) = IsCtor n <$> namelessExpr e
+namelessExpr (M.DataOf n e) = DataOf n <$> namelessExpr e
 namelessExpr (M.Error err) = return $ Error err
 
-namelessNameDef :: M.Def -> Nameless (Maybe Def)
+namelessNameDef :: M.Def -> Nameless (Maybe NameDef)
 namelessNameDef (M.Name (M.NameDef name expr)) = Just . Name name <$> namelessExpr expr
 namelessNameDef _ = return Nothing
 
 namelessDefs :: [M.Def] -> Nameless Code
-namelessDefs defs = Code annots <$> foldr collectNames body defs
+namelessDefs defs = Code annots tDefs <$> foldr collectNames body defs
   where
     body = mapMaybeM namelessNameDef defs
     annots = foldr collectAnnots Map.empty defs
+    tDefs = foldr collectTypeDefs [] defs
     collectNames (M.Name (M.NameDef name _)) acc = withBinding (Global name) acc
-    collectNames (M.Name (M.TypeAnnot _ _)) acc  = acc
-    collectAnnots (M.Name (M.NameDef _ _))           = id
+    collectNames _ acc = acc
     collectAnnots (M.Name (M.TypeAnnot name scheme)) = Map.insert name scheme
+    collectAnnots _                                  = id
+    collectTypeDefs (M.Type name vars (M.Variant xs)) = (Variant name vars xs:)
+    collectTypeDefs _ = id
 
 namelessCode :: M.Code -> Nameless Code
 namelessCode = namelessDefs

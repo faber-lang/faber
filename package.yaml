@@ -30,6 +30,7 @@ dependencies:
 - text
 - extra
 - bytestring
+- lens
 
 library:
   source-dirs: src
