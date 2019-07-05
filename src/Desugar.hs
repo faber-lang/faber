@@ -3,7 +3,7 @@ module Desugar where
 import Data.Bifunctor (bimap)
 
 import qualified Operators as Op
-import           Parse     (TypeExpr (..), TypeScheme)
+import           Parse     (TypeExpr (..), TypeScheme (..))
 import qualified Parse     as P
 
 data Pattern
@@ -72,25 +72,29 @@ desugarNameDef (P.NameDef name ps body defs) = NameDef name $ LetIn (map desugar
 -- using `TypeScheme` from `Parse` directly
 desugarNameDef (P.TypeAnnot name ty) = TypeAnnot name ty
 
-makeCtorFunction :: (String, [TypeExpr]) -> Def
-makeCtorFunction (ctor, ts) = Name $ NameDef ctor $ desugarLambda names body
+makeCtorFunction :: String -> [String] -> (String, [TypeExpr]) -> [Def]
+makeCtorFunction tyname vars (ctor, ts) = [Name typeAnnot, Name nameDef]
   where
     name i = "__ctorparam" ++ show i
     names = map name [0..(pred $ length ts)]
     body = CtorApp ctor (Tuple $ map Variable names)
+    nameDef = NameDef ctor $ desugarLambda names body
+    ctorType = foldl ApplyTy (Ident tyname) $ map Ident vars
+    scheme = Forall vars $ foldr Function ctorType ts
+    typeAnnot = TypeAnnot ctor scheme
 
-desugarTypeDef :: P.TypeDef -> (TypeDef, [Def])
-desugarTypeDef (P.Variant xs) = (typeDef, nameDefs)
+desugarTypeDef :: String -> [String] -> P.TypeDef -> (TypeDef, [Def])
+desugarTypeDef tyname vars (P.Variant xs) = (typeDef, nameDefs)
   where
     f (ctor, ts) = (ctor, Product ts)
     typeDef = Variant $ map f xs
-    nameDefs = map makeCtorFunction xs
+    nameDefs = concatMap (makeCtorFunction tyname vars) xs
 
 desugarDef :: P.Def -> [Def] -> [Def]
 desugarDef (P.Name body) acc           = (Name $ desugarNameDef body):acc
 desugarDef (P.Type name vars body) acc = (Type name vars typeDef):nameDefs ++ acc
   where
-    (typeDef, nameDefs) = desugarTypeDef body
+    (typeDef, nameDefs) = desugarTypeDef name vars body
 
 desugar :: P.Code -> Code
 desugar = foldr desugarDef []
