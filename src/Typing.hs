@@ -99,7 +99,7 @@ type EvalEnv = Map.Map String Type
 initEvalEnv :: EvalEnv
 initEvalEnv = Map.fromList [("Int", Integer)]
 
-type CtorEnv = Map.Map String (Type, Type)
+type CtorEnv = Map.Map String Scheme
 initCtorEnv :: CtorEnv
 initCtorEnv = Map.empty
 
@@ -314,19 +314,22 @@ inferExpr (N.NthOf n i e) = do
   return (s1 `compose` s2, apply s2 $ ts !! i)
 inferExpr (N.Error _) = (,) nullSubst <$> freshFree
 inferExpr (N.CtorApp name e) = do
-  (s1, t1) <- inferExpr e
-  (tr, tp) <- uses ctorEnv (Map.! name)
-  s2 <- unify t1 (apply s1 tp)
-  return (s1 `compose` s2, apply s2 tr)
+  tv <- freshFree
+  t1 <- instantiate =<< uses ctorEnv (Map.! name)
+  (s1, t2) <- inferExpr e
+  s2 <- unify t1 (Function t2 tv)
+  return (s2 `compose` s1, apply s2 tv)
 inferExpr (N.DataOf name e) = do
-  (s1, t1) <- inferExpr e
-  (tr, tp) <- uses ctorEnv (Map.! name)
-  s2 <- unify t1 (apply s1 tr)
-  return (s1 `compose` s2, apply s2 tp)
+  tv <- freshFree
+  t1 <- instantiate =<< uses ctorEnv (Map.! name)
+  (s1, t2) <- inferExpr e
+  s2 <- unify t1 (Function tv t2)
+  return (s1 `compose` s2, apply s2 tv)
 inferExpr (N.IsCtor name e) = do
-  (s1, t1) <- inferExpr e
-  (tr, tp) <- uses ctorEnv (Map.! name)
-  s2 <- unify t1 (apply s1 tr)
+  tv <- freshFree
+  t1 <- instantiate =<< uses ctorEnv (Map.! name)
+  (s1, t2) <- inferExpr e
+  s2 <- unify t1 (Function tv t2)
   return (s1 `compose` s2, Integer)  -- TODO: Bool
 
 inferDefs :: Map.Map String Scheme -> [N.NameDef] -> Infer ()
@@ -360,11 +363,13 @@ defineTypes xs = do
     defineOne (N.Variant name as ctors) = do
       vars <- replicateM (length as) freshBound
       let et = foldl Apply (Enum name) vars
-      withNames (Map.fromList $ zip as vars) $ mapM_ (defineCtor et) ctors
-    defineCtor :: Type -> (String, P.TypeExpr) -> Infer ()
-    defineCtor et (name, ty) = do
+      let tvs = map extractVar vars
+      withNames (Map.fromList $ zip as vars) $ mapM_ (defineCtor tvs et) ctors
+    defineCtor :: [TVar] -> Type -> (String, P.TypeExpr) -> Infer ()
+    defineCtor vars et (name, ty) = do
       t <- evalType ty
-      ctorEnv %= Map.insert name (et, t)
+      ctorEnv %= Map.insert name (Forall vars $ Function t et)
+    extractVar (Variable i _) = i
     extract (N.Variant name _ _) = name
     names = map extract xs
     names' = Map.fromList $ zip names $ map Enum names
