@@ -28,4 +28,7 @@ COPY --from=0 /usr/local/bin/faber-exe /usr/local/bin/faber
 COPY bin/fabc /usr/local/bin/
 COPY bin/fabrun /usr/local/bin/
 
+VOLUME /data
+WORKDIR /data
+
 CMD ["/usr/local/bin/faber"]
