@@ -24,4 +24,7 @@ RUN apt-get update \
   && rm -rf /var/lib/apt/lists/*
 
 COPY --from=0 /usr/local/bin/faber-exe /usr/local/bin/faber
+COPY bin/fabc /usr/local/bin/
+COPY bin/fabrun /usr/local/bin/
+
 CMD ["/usr/local/bin/faber"]

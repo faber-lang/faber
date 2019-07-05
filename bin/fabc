@@ -1,0 +1,15 @@
+#!/bin/bash
+
+function main() {
+  local input="$1"
+  local output="$2"
+
+  local lltmp="$(mktemp)"
+  local otmp="$(mktemp)"
+
+  faber "$input" > "$lltmp"
+  llc "$lltmp" -o "$otmp" -relocation-model=pic -filetype=obj
+  gcc "$otmp" -o "$output"
+}
+
+main "$@"
