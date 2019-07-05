@@ -56,4 +56,6 @@ spec = do
     it "pattern match (1)" $ execBS $(embedFile "test/data/match.fab") `shouldReturn` "50\n"
     it "pattern match (2)" $ execBS $(embedFile "test/data/match_value.fab") `shouldReturn` "28\n"
 
+    it "variants" $ execBS $(embedFile "test/data/variant.fab") `shouldReturn` "56\n"
     it "infinite list" $ execBS $(embedFile "test/data/list.fab") `shouldReturn` "987654321\n"
+    it "simple tree traversal" $ execBS $(embedFile "test/data/calc.fab") `shouldReturn` "68\n"
