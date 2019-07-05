@@ -55,3 +55,5 @@ spec = do
 
     it "pattern match (1)" $ execBS $(embedFile "test/data/match.fab") `shouldReturn` "50\n"
     it "pattern match (2)" $ execBS $(embedFile "test/data/match_value.fab") `shouldReturn` "28\n"
+
+    it "infinite list" $ execBS $(embedFile "test/data/list.fab") `shouldReturn` "987654321\n"
