@@ -53,7 +53,7 @@ spec = do
       expectError (Lambda (var 0) `add` int 1) `shouldContain` "UnificationFail"
 
     it "type terms with lambdas" $ do
-      typeExpr (Lambda $ var 0 `add` var 0) `shouldBe` Right (T.Function T.Integer T.Integer)
+      typeExpr (Lambda $ var 0 `add` var 0) `shouldBe` Right (T.functionTy T.Integer T.Integer)
       typeExpr (Apply (Lambda $ var 0) (int 1)) `shouldBe` Right T.Integer
       typeExpr (Apply (Apply (Lambda $ Lambda $ Apply (var 0) (var 1)) (int 10)) (Lambda $ var 0)) `shouldBe` Right T.Integer
 

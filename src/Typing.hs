@@ -26,12 +26,15 @@ data Level
 
 data Type
   = Integer
-  | Function Type Type
   | Variable TVar Level
   | Apply Type Type
   | Enum String
+  | Arrow
   | Tuple [Type]
   deriving (Show, Eq)
+
+functionTy :: Type -> Type -> Type
+functionTy a = Apply (Apply Arrow a)
 
 data Scheme = Forall [TVar] Type
 
@@ -67,17 +70,17 @@ class Substitutable a where
 
 instance Substitutable Type where
   apply s t@(Variable i _) = Map.findWithDefault t i s
-  apply s (Function a b)   = Function (apply s a) (apply s b)
   apply s (Apply a b)      = Apply (apply s a) (apply s b)
   apply s (Tuple xs)       = Tuple $ apply s xs
   apply _ Integer          = Integer
+  apply _ Arrow            = Arrow
   apply _ (Enum n)         = Enum n
 
-  ftv (Function a b) = ftv a `Set.union` ftv b
   ftv (Apply a b)    = ftv a `Set.union` ftv b
   ftv (Variable i _) = Set.singleton i
   ftv (Tuple xs)     = ftv xs
   ftv Integer        = Set.empty
+  ftv Arrow          = Set.empty
   ftv (Enum _)       = Set.empty
 
 instance Substitutable Scheme where
@@ -169,13 +172,10 @@ pushLevel :: Infer a -> Infer a
 pushLevel = locally letLevel succ
 
 unify :: Type -> Type -> Infer Subst
-unify (Function a1 b1) (Function a2 b2) = do
-  s_a <- unify a1 a2
-  s_b <- unify (apply s_a b1) (apply s_a b2)
-  return $ s_a `compose` s_b
 unify (Variable i _) t = bind i t
 unify t (Variable i _) = bind i t
 unify Integer Integer = return nullSubst
+unify Arrow Arrow     = return nullSubst
 unify (Tuple a) (Tuple b) = foldr compose nullSubst <$> zipWithM unify a b
 unify (Enum a) (Enum b) | a == b = return nullSubst
 unify (Apply a1 b1) (Apply a2 b2) = do
@@ -187,13 +187,10 @@ unify t1 t2 = throwError $ UnificationFail t1 t2
 -- annot -> ty -> subst
 -- TODO: Refactoring (lots of common code with `unify`)
 unifyAnnot :: Type -> Type -> Infer Subst
-unifyAnnot (Function a1 b1) (Function a2 b2) = do
-  s_a <- unifyAnnot a1 a2
-  s_b <- unifyAnnot (apply s_a b1) (apply s_a b2)
-  return $ s_a `compose` s_b
 unifyAnnot t (Variable i _) = bind i t
 unifyAnnot (Variable i _) t = throwError $ RigidUnificationFail i t
 unifyAnnot Integer Integer = return nullSubst
+unifyAnnot Arrow Arrow = return nullSubst
 unifyAnnot (Tuple a) (Tuple b) = foldr compose nullSubst <$> zipWithM unifyAnnot a b
 unifyAnnot (Enum a) (Enum b) | a == b = return nullSubst
 unifyAnnot (Apply a1 b1) (Apply a2 b2) = do
@@ -212,15 +209,12 @@ occursCheck i t = i `Set.member` ftv t
 
 -- generalization and instantiation
 generalizer :: Type -> Infer Subst
-generalizer (Function a b) = do
-  s1 <- generalizer a
-  s2 <- generalizer (apply s1 b)
-  return $ s1 `compose` s2
 generalizer (Apply a b) = do
   s1 <- generalizer a
   s2 <- generalizer (apply s1 b)
   return $ s1 `compose` s2
 generalizer Integer = return nullSubst
+generalizer Arrow = return nullSubst
 generalizer (Enum _) = return nullSubst
 generalizer (Tuple xs) = foldr compose nullSubst <$> mapM generalizer xs
 generalizer (Variable i (Free level)) = do
@@ -260,12 +254,12 @@ inferExpr (N.Integer _) = return (nullSubst, Integer)
 inferExpr (N.Lambda body) = do
     tv <- freshFree
     (s, ret) <- withParam tv $ inferExpr body
-    return (s, Function (apply s tv) ret)
+    return (s, functionTy (apply s tv) ret)
 inferExpr (N.Apply a b) = do
     tv <- freshFree
     (s1, a_ty) <- inferExpr a
     (s2, b_ty) <- withSubst s1 $ inferExpr b
-    s3 <- unify (apply s2 a_ty) (Function b_ty tv)
+    s3 <- unify (apply s2 a_ty) (functionTy b_ty tv)
     return (s3 `compose` s2 `compose` s1, apply s3 tv)
 inferExpr (N.LetIn annots defs body) = do
     tys <- mapM mapper annots
@@ -317,19 +311,19 @@ inferExpr (N.CtorApp name e) = do
   tv <- freshFree
   t1 <- instantiate =<< uses ctorEnv (Map.! name)
   (s1, t2) <- inferExpr e
-  s2 <- unify t1 (Function t2 tv)
+  s2 <- unify t1 (functionTy t2 tv)
   return (s2 `compose` s1, apply s2 tv)
 inferExpr (N.DataOf name e) = do
   tv <- freshFree
   t1 <- instantiate =<< uses ctorEnv (Map.! name)
   (s1, t2) <- inferExpr e
-  s2 <- unify t1 (Function tv t2)
+  s2 <- unify t1 (functionTy tv t2)
   return (s1 `compose` s2, apply s2 tv)
 inferExpr (N.IsCtor name e) = do
   tv <- freshFree
   t1 <- instantiate =<< uses ctorEnv (Map.! name)
   (s1, t2) <- inferExpr e
-  s2 <- unify t1 (Function tv t2)
+  s2 <- unify t1 (functionTy tv t2)
   return (s1 `compose` s2, Integer)  -- TODO: Bool
 
 inferDefs :: Map.Map String Scheme -> [N.NameDef] -> Infer ()
@@ -368,7 +362,7 @@ defineTypes xs = do
     defineCtor :: [TVar] -> Type -> (String, P.TypeExpr) -> Infer ()
     defineCtor vars et (name, ty) = do
       t <- evalType ty
-      ctorEnv %= Map.insert name (Forall vars $ Function t et)
+      ctorEnv %= Map.insert name (Forall vars $ functionTy t et)
     extractVar (Variable i _) = i
     extract (N.Variant name _ _) = name
     names = map extract xs
@@ -391,7 +385,7 @@ evalScheme (P.Forall as x) = do
 
 evalType :: P.TypeExpr -> Infer Type
 evalType (P.Ident x) = fromMaybeM (throwError $ UnboundTypeIdentifier x) $ Map.lookup x <$> use evalEnv
-evalType (P.Function a b) = Function <$> evalType a <*> evalType b
+evalType (P.Function a b) = functionTy <$> evalType a <*> evalType b
 evalType (P.Product xs) = Tuple <$> mapM evalType xs
 evalType (P.ApplyTy a b) = Apply <$> evalType a <*> evalType b
 
