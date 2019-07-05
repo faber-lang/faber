@@ -246,6 +246,7 @@ inferExprs = foldrM f (nullSubst, [])
       (s2, t) <- withSubst s1 $ inferExpr x
       return (s1 `compose` s2, t : tys)
 
+{-# HLINT ignore inferExpr "Reduce duplication" #-}
 inferExpr :: N.Expr -> Infer (Subst, Type)
 inferExpr (N.ParamBound i) = (,) nullSubst <$> findParam i
 inferExpr (N.GlobalBound name _) = (,) nullSubst <$> (instantiate =<< findGlobal name)
