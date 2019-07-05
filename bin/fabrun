@@ -1,0 +1,14 @@
+#!/bin/bash
+
+set -euo pipefail
+
+function main() {
+  local input="$1"
+
+  local exetmp="$(mktemp)"
+
+  fabc "$input" "$exetmp"
+  exec "$exetmp"
+}
+
+main "$@"
