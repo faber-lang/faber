@@ -92,7 +92,7 @@ desugarTypeDef tyname vars (P.Variant xs) = (typeDef, nameDefs)
 
 desugarDef :: P.Def -> [Def] -> [Def]
 desugarDef (P.Name body) acc           = (Name $ desugarNameDef body):acc
-desugarDef (P.Type name vars body) acc = (Type name vars typeDef):nameDefs ++ acc
+desugarDef (P.Type name vars body) acc = Type name vars typeDef:nameDefs ++ acc
   where
     (typeDef, nameDefs) = desugarTypeDef name vars body
 

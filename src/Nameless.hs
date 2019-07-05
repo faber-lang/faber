@@ -49,7 +49,7 @@ data TypeDef
   deriving (Show, Eq)
 
 data Code =
-  Code { annotations :: (Map.Map String TypeScheme)
+  Code { annotations :: Map.Map String TypeScheme
        , typeDefs    :: [TypeDef]
        , nameDefs    :: [NameDef] }
        deriving (Show, Eq)
