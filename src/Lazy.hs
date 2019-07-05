@@ -106,11 +106,11 @@ lazyExpr (E.GlobalBound s i)   = evalThunk (GlobalBound s i)
 lazyExpr (E.Integer i)         = Integer i
 lazyExpr (E.BinaryOp op a b)   = BinaryOp op (lazyExpr a) (lazyExpr b)
 lazyExpr (E.SingleOp op x)     = SingleOp op (lazyExpr x)
-lazyExpr (E.Tuple xs)          = Tuple $ map lazyExpr xs
+lazyExpr (E.Tuple xs)          = Tuple $ map lazify xs
 lazyExpr (E.Lambda body)       = Lambda $ lazyExpr body
 lazyExpr (E.LetIn _ defs body) = LetIn (map lazify defs) $ lazyExpr body
 lazyExpr (E.If c t e)          = If (lazyExpr c) (lazyExpr t) (lazyExpr e)
-lazyExpr (E.NthOf _ i e)       = NthOf i $ lazyExpr e
+lazyExpr (E.NthOf _ i e)       = evalThunk $ NthOf i $ lazyExpr e
 lazyExpr (E.Error err)         = Error err
 
 lazyDef :: E.NameDef -> Def
