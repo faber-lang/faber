@@ -221,7 +221,7 @@ codegen m = IR.buildModule "faber-output" $ do
     ret <- genCode $ code m
     int <- IR.ptrtoint ret Ty.i64
     printf <- IR.externVarArgs "printf" [Ty.ptr Ty.i8] Ty.i32
-    fmt <- IR.globalStringPtr "%d\n" "fmt"
+    fmt <- IR.globalStringPtr "%ld\n" "fmt"
     _ <- IR.call printf [(fmt, []), (int, [])]
     IR.ret $ AST.ConstantOperand $ Const.Int 32 0
 
