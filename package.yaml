@@ -1,6 +1,6 @@
 name:                faber
 version:             0.1.0.0
-github:              "coord-e/faber"
+github:              "faber-lang/faber"
 license:             BSD3
 author:              "coord.e"
 maintainer:          "me@coord-e.com"
@@ -17,7 +17,7 @@ extra-source-files:
 # To avoid duplicated efforts in documentation and dealing with the
 # complications of embedding Haddock markup inside cabal files, it is
 # common to point users to the README.md file.
-description:         Please see the README on GitHub at <https://github.com/coord-e/faber#readme>
+description:         Please see the README on GitHub at <https://github.com/faber-lang/faber#readme>
 
 dependencies:
 - base >= 4.7 && < 5
