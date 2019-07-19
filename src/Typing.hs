@@ -389,7 +389,10 @@ manyOrErr err ts1 ts2 = fromMaybeM (throwError err) $ runMaybeT $ unifiesMany ts
 
 unifies :: Type -> Type -> Solve Subst
 unifies t1 t2                       | t1 == t2 = return nullSubst
-unifies (Variable i Rigid) t        = throwError $ RigidUnificationFail i t
+unifies t@(Variable _ Rigid) (Variable i  _)  = bind i t
+unifies (Variable i _)  t@(Variable _ Rigid)  = bind i t
+unifies (Variable i Rigid) t  = throwError $ RigidUnificationFail i t
+unifies t (Variable i Rigid)  = throwError $ RigidUnificationFail i t
 unifies (Variable i _) t            = bind i t
 unifies t (Variable i _)            = bind i t
 unifies t1@(Apply a1 b1) t2@(Apply a2 b2) = manyOrErr (UnificationFail t1 t2) [a1, b1] [a2, b2]
