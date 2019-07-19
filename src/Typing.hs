@@ -2,15 +2,16 @@
 
 module Typing where
 
-import           Control.Lens         hiding (Level)
+import           Control.Lens              hiding (Level)
 import           Control.Monad.Except
-import           Control.Monad.Extra  (fromMaybeM, maybeM)
+import           Control.Monad.Extra       (fromMaybeM, maybeM)
 import           Control.Monad.Reader
 import           Control.Monad.State
+import           Control.Monad.Trans.Maybe
 import           Data.Foldable
-import qualified Data.Map             as Map
-import           Data.Maybe           (fromMaybe)
-import qualified Data.Set             as Set
+import qualified Data.Map                  as Map
+import           Data.Maybe                (fromMaybe)
+import qualified Data.Set                  as Set
 import           Data.Tuple.Extra
 
 import qualified Nameless as N
@@ -184,14 +185,6 @@ unify t1 t2 = cstrs %= (Unify t1 t2:)
 unifyAnnot :: Type -> Type -> Infer ()
 unifyAnnot t1 t2 = cstrs %= (UnifyAnnot t1 t2:)
 
-bind :: Int -> Type -> Infer Subst
-bind i (Variable i' _) | i' == i = return nullSubst
-bind i t | occursCheck i t = throwError $ InfiniteType i t
-         | otherwise       = return $ Map.singleton i t
-
-occursCheck :: Substitutable a => Int -> a -> Bool
-occursCheck i t = i `Set.member` ftv t
-
 -- generalization and instantiation
 generalizer :: Type -> Infer [Int]
 generalizer (Apply a b) = (++) <$> generalizer a <*> generalizer b
@@ -341,6 +334,7 @@ defineTypes xs = do
     names = map extract xs
     names' = Map.fromList $ zip names $ map Enum names
 
+-- type evaluator
 withNames :: Map.Map String Type -> Infer a -> Infer a
 withNames m a = do
   old <- use evalEnv
@@ -361,6 +355,36 @@ evalType (P.Ident x) = fromMaybeM (throwError $ UnboundTypeIdentifier x) $ Map.l
 evalType (P.Function a b) = functionTy <$> evalType a <*> evalType b
 evalType (P.Product xs) = Tuple <$> mapM evalType xs
 evalType (P.ApplyTy a b) = Apply <$> evalType a <*> evalType b
+
+-- constraint solver
+type Solve = Except TypeError
+
+unifiesMany :: [Type] -> [Type] -> MaybeT Solve Subst
+unifiesMany [] [] = return nullSubst
+unifiesMany (t1 : ts1) (t2 : ts2) = do
+  s1 <- lift $ unifies t1 t2
+  s2 <- unifiesMany (apply s1 ts1) (apply s1 ts2)
+  return $ s2 `compose` s1
+unifiesMany _ _ = mzero
+
+manyOrErr :: TypeError -> [Type] -> [Type] -> Solve Subst
+manyOrErr err ts1 ts2 = fromMaybeM (throwError err) $ runMaybeT $ unifiesMany ts1 ts2
+
+unifies :: Type -> Type -> Solve Subst
+unifies t1 t2                       | t1 == t2 = return nullSubst
+unifies (Variable i _) t            = bind i t
+unifies t (Variable i _)            = bind i t
+unifies t1@(Apply a1 b1) t2@(Apply a2 b2) = manyOrErr (UnificationFail t1 t2) [a1, b1] [a2, b2]
+unifies t1@(Tuple xs) t2@(Tuple ys)       = manyOrErr (UnificationFail t1 t2) xs ys
+unifies t1 t2                       = throwError $ UnificationFail t1 t2
+
+bind :: Int -> Type -> Solve Subst
+bind i (Variable i' _) | i' == i = return nullSubst
+bind i t | occursCheck i t = throwError $ InfiniteType i t
+         | otherwise       = return $ Map.singleton i t
+
+occursCheck :: Substitutable a => Int -> a -> Bool
+occursCheck i t = i `Set.member` ftv t
 
 typing :: N.Code -> Either TypeError ()
 typing = runInfer . inferCode
