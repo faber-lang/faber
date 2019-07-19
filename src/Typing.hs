@@ -1,4 +1,6 @@
-{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE FlexibleInstances    #-}
+{-# LANGUAGE TemplateHaskell      #-}
+{-# LANGUAGE TypeSynonymInstances #-}
 
 module Typing where
 
@@ -12,7 +14,7 @@ import           Data.Foldable
 import qualified Data.Map                  as Map
 import           Data.Maybe                (fromMaybe)
 import qualified Data.Set                  as Set
-import           Data.Tuple.Extra
+import           Data.Tuple.Extra          hiding (both)
 
 import qualified Nameless as N
 import qualified Parse    as P
@@ -97,6 +99,12 @@ instance Substitutable TypeEnv where
   apply s (TypeEnv ps ls gs) = TypeEnv (apply s ps) (apply s ls) (Map.map (apply s) gs)
   ftv (TypeEnv ps ls gs) = ftv ps `Set.union` ftv ls `Set.union` ftv (Map.elems gs)
 
+type Constraint = (Type, Type)
+
+instance Substitutable Constraint where
+  apply s c = c & both %~ apply s
+  ftv (t1, t2) = ftv t1 `Set.union` ftv t2
+
 compose :: Subst -> Subst -> Subst
 s1 `compose` s2 = Map.map (apply s1) s2 `Map.union` s1
 
@@ -115,8 +123,6 @@ makeLenses ''InferReader
 
 initInferReader :: InferReader
 initInferReader = InferReader initEnv 0
-
-type Constraint = (Type, Type)
 
 data InferState =
   InferState { _unique  :: Int
@@ -137,11 +143,6 @@ data TypeError
   | UnboundVariable String
   | UnboundTypeIdentifier String
   deriving (Show, Eq)
-
-runInfer :: Infer a -> Either TypeError a
-runInfer m = case evalState (runReaderT (runExceptT m) initInferReader) initInferState of
-  Left err -> Left err
-  Right a  -> Right a
 
 fresh :: Level -> Infer Type
 fresh level = unique += 1 >> uses unique (flip Variable level)
@@ -342,6 +343,12 @@ defineTypes xs = do
     names = map extract xs
     names' = Map.fromList $ zip names $ map Enum names
 
+runInfer :: Infer a -> Either TypeError (a, [Constraint])
+runInfer m = a & _Right %~ f
+  where
+    f a = (a, s ^. cstrs)
+    (a, s) = runState (runReaderT (runExceptT m) initInferReader) initInferState
+
 -- type evaluator
 withNames :: Map.Map String Type -> Infer a -> Infer a
 withNames m a = do
@@ -395,5 +402,20 @@ bind i t | occursCheck i t = throwError $ InfiniteType i t
 occursCheck :: Substitutable a => Int -> a -> Bool
 occursCheck i t = i `Set.member` ftv t
 
+solver :: [Constraint] -> Solve Subst
+solver [] = return nullSubst
+solver ((t1, t2) : cs) = do
+  s <- unifies t1 t2
+  compose s <$> solver (apply s cs)
+
+runSolve :: Solve a -> Either TypeError a
+runSolve = runExcept
+
+runTyping :: Infer a -> Either TypeError ()
+runTyping m = do
+  (_, cs) <- runInfer m
+  _ <- runSolve $ solver cs
+  return ()
+
 typing :: N.Code -> Either TypeError ()
-typing = runInfer . inferCode
+typing = runTyping . inferCode
