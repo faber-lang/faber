@@ -180,10 +180,6 @@ pushLevel = locally letLevel succ
 unify :: Type -> Type -> Infer ()
 unify t1 t2 = cstrs %= ((t1, t2):)
 
--- annot -> ty -> subst
-unifyAnnot :: Type -> Type -> Infer ()
-unifyAnnot t1 t2 = cstrs %= ((rigidify t1, t2):)
-
 rigidify :: Type -> Type
 rigidify Integer               = Integer
 rigidify (Enum s)              = Enum s
@@ -223,9 +219,6 @@ instantiate (Forall xs t) = do
   let s = Map.fromList $ zip xs xs'
   return $ apply s t
 
-inferExprs :: [N.Expr] -> Infer [Type]
-inferExprs = mapM inferExpr
-
 {-# HLINT ignore inferExpr "Reduce duplication" #-}
 inferExpr :: N.Expr -> Infer Type
 inferExpr (N.ParamBound i) = findParam i
@@ -244,7 +237,7 @@ inferExpr (N.Apply a b) = do
     return tv
 inferExpr (N.LetIn annots defs body) = do
     tys <- mapM mapper annots
-    iTys <- withLocals tys $ pushLevel $ inferExprs defs
+    iTys <- withLocals tys $ pushLevel $ mapM inferExpr defs
     schemes <- zipWithM zipper iTys annots
     withLocals schemes $ inferExpr body
   where
@@ -253,9 +246,7 @@ inferExpr (N.LetIn annots defs body) = do
     go t1 annot = do
       scheme <- evalScheme annot
       let (Forall _ t2) = scheme
-      -- we don't need the result of `unifyAnnot`
-      -- see the comment below in inferDefs
-      unifyAnnot t2 t1 >> return scheme
+      unify (rigidify t2) t1 >> return scheme
 inferExpr (N.BinaryOp op a b) =
     let op_type = Integer in
     do
@@ -270,7 +261,7 @@ inferExpr (N.SingleOp op x) =
       ty <- inferExpr x
       unify ty op_type
       return op_type
-inferExpr (N.Tuple xs) = Tuple <$> inferExprs xs
+inferExpr (N.Tuple xs) = Tuple <$> mapM inferExpr xs
 inferExpr (N.If c t e) = do
   t1 <- inferExpr c
   t2 <- inferExpr t
@@ -306,7 +297,7 @@ inferExpr (N.IsCtor name e) = do
 inferDefs :: Map.Map String Scheme -> [N.NameDef] -> Infer ()
 inferDefs sig defs = do
   filledSig <- Map.fromList <$> mapM mapper names
-  tys <- foldr (collectNames filledSig) (pushLevel $ inferExprs bodies) names
+  tys <- foldr (collectNames filledSig) (pushLevel $ mapM inferExpr bodies) names
   zipWithM_ zipper names tys
   where
     extract (N.Name name body) = (name, body)
@@ -314,10 +305,7 @@ inferDefs sig defs = do
     collectNames s name = withGlobal name (s Map.! name)
     mapper name = (,) name <$> fromMaybeM (Forall [] <$> freshFree) (return $ Map.lookup name sig)
     zipper name ty = case Map.lookup name sig of
-      -- there is no need to use the resulting subst of `unifyAnnot`
-      -- because the resulting type is surely `annot`,
-      -- and all we need to do here is to check that `t` is compatible with `annot`
-      Just (Forall _ annot) -> void $ unifyAnnot annot ty
+      Just (Forall _ annot) -> unify (rigidify annot) ty
       Nothing               -> return ()
 
 inferCode :: N.Code -> Infer ()
