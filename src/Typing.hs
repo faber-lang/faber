@@ -195,25 +195,27 @@ rigidify (Tuple xs)            = Tuple $ map rigidify xs
 rigidify (Apply a b)           = Apply (rigidify a) (rigidify b)
 
 -- generalization and instantiation
-generalizer :: Type -> Infer [Int]
-generalizer (Apply a b) = (++) <$> generalizer a <*> generalizer b
-generalizer Integer = return []
-generalizer Arrow = return []
-generalizer (Enum _) = return []
-generalizer (Tuple xs) = concat <$> mapM generalizer xs
+-- TODO: Stop using `Infer` here (use of `unify` in `generalizer` should be prohibited)
+generalizer :: Type -> Infer Subst
+generalizer (Apply a b) = compose <$> generalizer a <*> generalizer b
+generalizer Integer = return nullSubst
+generalizer Arrow = return nullSubst
+generalizer (Enum _) = return nullSubst
+generalizer (Tuple xs) = foldr compose nullSubst <$> mapM generalizer xs
 generalizer v@(Variable i (Free level)) = do
     cLevel <- view letLevel
     if cLevel < level
-    then introVar v =<< freshBound
-    else return []
-  where
-    introVar ty v@(Variable i Bound) = unify ty v >> return [i]
-generalizer (Variable _ Bound) = return []
+    then Map.singleton i <$> freshBound
+    else return nullSubst
+generalizer (Variable _ Bound) = return nullSubst
 
 generalize :: Type -> Infer Scheme
 generalize t = do
-  vars <- generalizer t
-  return $ Forall vars t
+  s <- generalizer t
+  return $ Forall (extractAll s) (apply s t)
+  where
+    extractAll = map extract . Map.elems
+    extract (Variable i Bound) = i
 
 instantiate :: Scheme -> Infer Type
 instantiate (Forall xs t) = do
