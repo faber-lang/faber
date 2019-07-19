@@ -114,14 +114,19 @@ makeLenses ''InferReader
 initInferReader :: InferReader
 initInferReader = InferReader initEnv 0
 
+data Constraint
+  = Unify Type Type
+  | UnifyAnnot Type Type
+
 data InferState =
   InferState { _unique  :: Int
              , _ctorEnv :: CtorEnv
-             , _evalEnv :: EvalEnv }
+             , _evalEnv :: EvalEnv
+             , _cstrs   :: [Constraint] }
 makeLenses ''InferState
 
 initInferState :: InferState
-initInferState = InferState 0 initCtorEnv initEvalEnv
+initInferState = InferState 0 initCtorEnv initEvalEnv []
 
 type Infer = ExceptT TypeError (ReaderT InferReader (State InferState))
 
@@ -171,33 +176,13 @@ withLocals = locally typeEnv . appendLocal
 pushLevel :: Infer a -> Infer a
 pushLevel = locally letLevel succ
 
-unify :: Type -> Type -> Infer Subst
-unify (Variable i _) t = bind i t
-unify t (Variable i _) = bind i t
-unify Integer Integer = return nullSubst
-unify Arrow Arrow     = return nullSubst
-unify (Tuple a) (Tuple b) = foldr compose nullSubst <$> zipWithM unify a b
-unify (Enum a) (Enum b) | a == b = return nullSubst
-unify (Apply a1 b1) (Apply a2 b2) = do
-  s_a <- unify a1 a2
-  s_b <- unify (apply s_a b1) (apply s_a b2)
-  return $ s_a `compose` s_b
-unify t1 t2 = throwError $ UnificationFail t1 t2
+unify :: Type -> Type -> Infer ()
+unify t1 t2 = cstrs %= (Unify t1 t2:)
 
 -- annot -> ty -> subst
 -- TODO: Refactoring (lots of common code with `unify`)
-unifyAnnot :: Type -> Type -> Infer Subst
-unifyAnnot t (Variable i _) = bind i t
-unifyAnnot (Variable i _) t = throwError $ RigidUnificationFail i t
-unifyAnnot Integer Integer = return nullSubst
-unifyAnnot Arrow Arrow = return nullSubst
-unifyAnnot (Tuple a) (Tuple b) = foldr compose nullSubst <$> zipWithM unifyAnnot a b
-unifyAnnot (Enum a) (Enum b) | a == b = return nullSubst
-unifyAnnot (Apply a1 b1) (Apply a2 b2) = do
-  s_a <- unifyAnnot a1 a2
-  s_b <- unifyAnnot (apply s_a b1) (apply s_a b2)
-  return $ s_a `compose` s_b
-unifyAnnot t1 t2 = throwError $ UnificationFail t1 t2
+unifyAnnot :: Type -> Type -> Infer ()
+unifyAnnot t1 t2 = cstrs %= (UnifyAnnot t1 t2:)
 
 bind :: Int -> Type -> Infer Subst
 bind i (Variable i' _) | i' == i = return nullSubst
@@ -208,30 +193,25 @@ occursCheck :: Substitutable a => Int -> a -> Bool
 occursCheck i t = i `Set.member` ftv t
 
 -- generalization and instantiation
-generalizer :: Type -> Infer Subst
-generalizer (Apply a b) = do
-  s1 <- generalizer a
-  s2 <- generalizer (apply s1 b)
-  return $ s1 `compose` s2
-generalizer Integer = return nullSubst
-generalizer Arrow = return nullSubst
-generalizer (Enum _) = return nullSubst
-generalizer (Tuple xs) = foldr compose nullSubst <$> mapM generalizer xs
-generalizer (Variable i (Free level)) = do
-  cLevel <- view letLevel
-  if cLevel < level
-  then bind i =<< freshBound
-  else return nullSubst
-generalizer (Variable _ Bound) = return nullSubst
+generalizer :: Type -> Infer [Int]
+generalizer (Apply a b) = (++) <$> generalizer a <*> generalizer b
+generalizer Integer = return []
+generalizer Arrow = return []
+generalizer (Enum _) = return []
+generalizer (Tuple xs) = concat <$> mapM generalizer xs
+generalizer v@(Variable i (Free level)) = do
+    cLevel <- view letLevel
+    if cLevel < level
+    then introVar v =<< freshBound
+    else return []
+  where
+    introVar ty v@(Variable i Bound) = unify ty v >> return [i]
+generalizer (Variable _ Bound) = return []
 
 generalize :: Type -> Infer Scheme
 generalize t = do
-  s <- generalizer t
-  return $ Forall (extractAll s) (apply s t)
-  where
-    extractAll = map extract . Map.elems
-    extract (Variable i Bound) = i
-    extract _                  = error "unreachable"
+  vars <- generalizer t
+  return $ Forall vars t
 
 instantiate :: Scheme -> Infer Type
 instantiate (Forall xs t) = do
@@ -239,38 +219,30 @@ instantiate (Forall xs t) = do
   let s = Map.fromList $ zip xs xs'
   return $ apply s t
 
-inferExprs :: [N.Expr] -> Infer (Subst, [Type])
-inferExprs = foldrM f (nullSubst, [])
-  where
-    f x (s1, tys) = do
-      (s2, t) <- withSubst s1 $ inferExpr x
-      return (s1 `compose` s2, t : tys)
+inferExprs :: [N.Expr] -> Infer [Type]
+inferExprs = mapM inferExpr
 
 {-# HLINT ignore inferExpr "Reduce duplication" #-}
-inferExpr :: N.Expr -> Infer (Subst, Type)
-inferExpr (N.ParamBound i) = (,) nullSubst <$> findParam i
-inferExpr (N.GlobalBound name _) = (,) nullSubst <$> (instantiate =<< findGlobal name)
-inferExpr (N.LetBound i) = (,) nullSubst <$> (instantiate =<< findLocal i)
-inferExpr (N.Integer _) = return (nullSubst, Integer)
+inferExpr :: N.Expr -> Infer Type
+inferExpr (N.ParamBound i) = findParam i
+inferExpr (N.GlobalBound name _) = instantiate =<< findGlobal name
+inferExpr (N.LetBound i) = instantiate =<< findLocal i
+inferExpr (N.Integer _) = return Integer
 inferExpr (N.Lambda body) = do
     tv <- freshFree
-    (s, ret) <- withParam tv $ inferExpr body
-    return (s, functionTy (apply s tv) ret)
+    ret <- withParam tv $ inferExpr body
+    return $ functionTy tv ret
 inferExpr (N.Apply a b) = do
     tv <- freshFree
-    (s1, a_ty) <- inferExpr a
-    (s2, b_ty) <- withSubst s1 $ inferExpr b
-    s3 <- unify (apply s2 a_ty) (functionTy b_ty tv)
-    return (s3 `compose` s2 `compose` s1, apply s3 tv)
+    a_ty <- inferExpr a
+    b_ty <- inferExpr b
+    unify a_ty (functionTy b_ty tv)
+    return tv
 inferExpr (N.LetIn annots defs body) = do
     tys <- mapM mapper annots
-    (s1, iTys) <- withLocals tys $ pushLevel $ inferExprs defs
+    iTys <- withLocals tys $ pushLevel $ inferExprs defs
     schemes <- zipWithM zipper iTys annots
-    (s2, ty) <-
-      withSubst s1 $
-        withLocals schemes $
-          inferExpr body
-    return (s1 `compose` s2, ty)
+    withLocals schemes $ inferExpr body
   where
     mapper annot = maybeM (Forall [] <$> freshFree) evalScheme $ return annot
     zipper t = maybe (generalize t) (go t)
@@ -283,55 +255,55 @@ inferExpr (N.LetIn annots defs body) = do
 inferExpr (N.BinaryOp op a b) =
     let op_type = Integer in
     do
-      (s1, a_ty) <- inferExpr a
-      (s2, b_ty) <- withSubst s1 $ inferExpr b
-      s3 <- unify (apply s2 a_ty) op_type
-      s4 <- unify (apply s3 b_ty) op_type
-      return (s4 `compose` s3 `compose` s2 `compose` s1, op_type)
+      a_ty <- inferExpr a
+      b_ty <- inferExpr b
+      unify a_ty op_type
+      unify b_ty op_type
+      return op_type
 inferExpr (N.SingleOp op x) =
     let op_type = Integer in
     do
-      (s1, ty) <- inferExpr x
-      s2 <- unify (apply s1 ty) op_type
-      return (s2 `compose` s1, op_type)
-inferExpr (N.Tuple xs) = second Tuple <$> inferExprs xs
+      ty <- inferExpr x
+      unify ty op_type
+      return op_type
+inferExpr (N.Tuple xs) = Tuple <$> inferExprs xs
 inferExpr (N.If c t e) = do
-  (s1, t1) <- inferExpr c
-  (s2, t2) <- inferExpr t
-  (s3, t3) <- inferExpr e
-  s4 <- unify t1 Integer   -- TODO: Bool
-  s5 <- unify t2 t3
-  return (s1 `compose` s2 `compose` s3 `compose` s4 `compose` s5, apply s5 t2)
+  t1 <- inferExpr c
+  t2 <- inferExpr t
+  t3 <- inferExpr e
+  unify t1 Integer   -- TODO: Bool
+  unify t2 t3
+  return t2
 inferExpr (N.NthOf n i e) = do
   ts <- replicateM n freshFree
-  (s1, t2) <- inferExpr e
-  s2 <- unify (Tuple ts) t2
-  return (s1 `compose` s2, apply s2 $ ts !! i)
-inferExpr (N.Error _) = (,) nullSubst <$> freshFree
+  t2 <- inferExpr e
+  unify (Tuple ts) t2
+  return $ ts !! i
+inferExpr (N.Error _) = freshFree
 inferExpr (N.CtorApp name e) = do
   tv <- freshFree
   t1 <- instantiate =<< uses ctorEnv (Map.! name)
-  (s1, t2) <- inferExpr e
-  s2 <- unify t1 (functionTy t2 tv)
-  return (s2 `compose` s1, apply s2 tv)
+  t2 <- inferExpr e
+  unify t1 (functionTy t2 tv)
+  return tv
 inferExpr (N.DataOf name e) = do
   tv <- freshFree
   t1 <- instantiate =<< uses ctorEnv (Map.! name)
-  (s1, t2) <- inferExpr e
-  s2 <- unify t1 (functionTy tv t2)
-  return (s1 `compose` s2, apply s2 tv)
+  t2 <- inferExpr e
+  unify t1 (functionTy tv t2)
+  return tv
 inferExpr (N.IsCtor name e) = do
   tv <- freshFree
   t1 <- instantiate =<< uses ctorEnv (Map.! name)
-  (s1, t2) <- inferExpr e
-  s2 <- unify t1 (functionTy tv t2)
-  return (s1 `compose` s2, Integer)  -- TODO: Bool
+  t2 <- inferExpr e
+  unify t1 (functionTy tv t2)
+  return Integer  -- TODO: Bool
 
 inferDefs :: Map.Map String Scheme -> [N.NameDef] -> Infer ()
 inferDefs sig defs = do
   filledSig <- Map.fromList <$> mapM mapper names
-  (s, tys) <- foldr (collectNames filledSig) (pushLevel $ inferExprs bodies) names
-  zipWithM_ zipper names (apply s tys)
+  tys <- foldr (collectNames filledSig) (pushLevel $ inferExprs bodies) names
+  zipWithM_ zipper names tys
   where
     extract (N.Name name body) = (name, body)
     (names, bodies) = mapAndUnzip extract defs
