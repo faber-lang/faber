@@ -1,6 +1,5 @@
 module TypingSpec (spec) where
 
-import Control.Arrow (right)
 import Test.Hspec
 
 import           Nameless

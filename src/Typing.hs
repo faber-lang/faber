@@ -11,11 +11,8 @@ import           Control.Monad.Reader
 import           Control.Monad.State
 import           Control.Monad.Trans.Maybe
 import           Data.Bool                 (bool)
-import           Data.Foldable
 import qualified Data.Map                  as Map
-import           Data.Maybe                (fromMaybe)
 import qualified Data.Set                  as Set
-import           Data.Tuple.Extra          hiding (both)
 
 import qualified Nameless as N
 import qualified Parse    as P
@@ -186,8 +183,8 @@ rigidify :: Type -> Rigidify Type
 rigidify Integer               = return Integer
 rigidify (Enum s)              = return $ Enum s
 rigidify Arrow                 = return Arrow
-rigidify t@(Variable i Bound)  = asks $ bool t (Variable i Rigid) . (elem i)
-rigidify t@(Variable i Rigid)  = return t
+rigidify t@(Variable i Bound)  = asks $ bool t (Variable i Rigid) . elem i
+rigidify t@(Variable _ Rigid)  = return t
 rigidify (Variable _ (Free _)) = error "attempt to rigidify free var"
 rigidify (Tuple xs)            = Tuple <$> mapM rigidify xs
 rigidify (Apply a b)           = Apply <$> rigidify a <*> rigidify b
@@ -203,12 +200,12 @@ generalizer Integer = return nullSubst
 generalizer Arrow = return nullSubst
 generalizer (Enum _) = return nullSubst
 generalizer (Tuple xs) = foldr compose nullSubst <$> mapM generalizer xs
-generalizer v@(Variable i (Free level)) = do
+generalizer (Variable i (Free level)) = do
     cLevel <- view letLevel
     if cLevel < level
     then Map.singleton i <$> freshBound
     else return nullSubst
-generalizer (Variable _ Bound) = return nullSubst
+generalizer (Variable _ _) = return nullSubst
 
 generalize :: Type -> Infer Scheme
 generalize t = do
