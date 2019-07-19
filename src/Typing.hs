@@ -10,6 +10,7 @@ import           Control.Monad.Extra       (fromMaybeM, maybeM)
 import           Control.Monad.Reader
 import           Control.Monad.State
 import           Control.Monad.Trans.Maybe
+import           Data.Bool                 (bool)
 import           Data.Foldable
 import qualified Data.Map                  as Map
 import           Data.Maybe                (fromMaybe)
@@ -180,15 +181,19 @@ pushLevel = locally letLevel succ
 unify :: Type -> Type -> Infer ()
 unify t1 t2 = cstrs %= ((t1, t2):)
 
-rigidify :: Type -> Type
-rigidify Integer               = Integer
-rigidify (Enum s)              = Enum s
-rigidify Arrow                 = Arrow
-rigidify (Variable i Bound)    = Variable i Rigid
-rigidify (Variable i Rigid)    = Variable i Rigid
+type Rigidify = Reader [Int]
+rigidify :: Type -> Rigidify Type
+rigidify Integer               = return Integer
+rigidify (Enum s)              = return $ Enum s
+rigidify Arrow                 = return Arrow
+rigidify t@(Variable i Bound)  = asks $ bool t (Variable i Rigid) . (elem i)
+rigidify t@(Variable i Rigid)  = return t
 rigidify (Variable _ (Free _)) = error "attempt to rigidify free var"
-rigidify (Tuple xs)            = Tuple $ map rigidify xs
-rigidify (Apply a b)           = Apply (rigidify a) (rigidify b)
+rigidify (Tuple xs)            = Tuple <$> mapM rigidify xs
+rigidify (Apply a b)           = Apply <$> rigidify a <*> rigidify b
+
+runRigidify :: [Int] -> Type -> Type
+runRigidify l t = runReader (rigidify t) l
 
 -- generalization and instantiation
 -- TODO: Stop using `Infer` here (use of `unify` in `generalizer` should be prohibited)
@@ -245,8 +250,8 @@ inferExpr (N.LetIn annots defs body) = do
     zipper t = maybe (generalize t) (go t)
     go t1 annot = do
       scheme <- evalScheme annot
-      let (Forall _ t2) = scheme
-      unify (rigidify t2) t1 >> return scheme
+      let (Forall vars t2) = scheme
+      unify (runRigidify vars t2) t1 >> return scheme
 inferExpr (N.BinaryOp op a b) =
     let op_type = Integer in
     do
@@ -305,8 +310,8 @@ inferDefs sig defs = do
     collectNames s name = withGlobal name (s Map.! name)
     mapper name = (,) name <$> fromMaybeM (Forall [] <$> freshFree) (return $ Map.lookup name sig)
     zipper name ty = case Map.lookup name sig of
-      Just (Forall _ annot) -> unify (rigidify annot) ty
-      Nothing               -> return ()
+      Just (Forall vars annot) -> unify (runRigidify vars annot) ty
+      Nothing                  -> return ()
 
 inferCode :: N.Code -> Infer ()
 inferCode (N.Code sig typeDefs defs) = do
