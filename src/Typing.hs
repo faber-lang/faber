@@ -411,11 +411,17 @@ solver ((t1, t2) : cs) = do
 runSolve :: Solve a -> Either TypeError a
 runSolve = runExcept
 
-runTyping :: Infer a -> Either TypeError ()
-runTyping m = do
+runTyping_ :: Infer a -> Either TypeError ()
+runTyping_ m = do
   (_, cs) <- runInfer m
   _ <- runSolve $ solver cs
   return ()
 
 typing :: N.Code -> Either TypeError ()
-typing = runTyping . inferCode
+typing = runTyping_ . inferCode
+
+runTyping :: Substitutable a => Infer a -> Either TypeError a
+runTyping m = do
+  (a, cs) <- runInfer m
+  s <- runSolve $ solver cs
+  return (apply s a)
