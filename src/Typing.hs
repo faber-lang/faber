@@ -23,6 +23,7 @@ type TVar = Int
 data Level
   = Free Int
   | Bound
+  | Rigid
   deriving (Show, Eq)
 
 data Type
@@ -115,9 +116,7 @@ makeLenses ''InferReader
 initInferReader :: InferReader
 initInferReader = InferReader initEnv 0
 
-data Constraint
-  = Unify Type Type
-  | UnifyAnnot Type Type
+type Constraint = (Type, Type)
 
 data InferState =
   InferState { _unique  :: Int
@@ -178,12 +177,21 @@ pushLevel :: Infer a -> Infer a
 pushLevel = locally letLevel succ
 
 unify :: Type -> Type -> Infer ()
-unify t1 t2 = cstrs %= (Unify t1 t2:)
+unify t1 t2 = cstrs %= ((t1, t2):)
 
 -- annot -> ty -> subst
--- TODO: Refactoring (lots of common code with `unify`)
 unifyAnnot :: Type -> Type -> Infer ()
-unifyAnnot t1 t2 = cstrs %= (UnifyAnnot t1 t2:)
+unifyAnnot t1 t2 = cstrs %= ((rigidify t1, t2):)
+
+rigidify :: Type -> Type
+rigidify Integer               = Integer
+rigidify (Enum s)              = Enum s
+rigidify Arrow                 = Arrow
+rigidify (Variable i Bound)    = Variable i Rigid
+rigidify (Variable i Rigid)    = Variable i Rigid
+rigidify (Variable _ (Free _)) = error "attempt to rigidify free var"
+rigidify (Tuple xs)            = Tuple $ map rigidify xs
+rigidify (Apply a b)           = Apply (rigidify a) (rigidify b)
 
 -- generalization and instantiation
 generalizer :: Type -> Infer [Int]
@@ -372,6 +380,7 @@ manyOrErr err ts1 ts2 = fromMaybeM (throwError err) $ runMaybeT $ unifiesMany ts
 
 unifies :: Type -> Type -> Solve Subst
 unifies t1 t2                       | t1 == t2 = return nullSubst
+unifies (Variable i Rigid) t        = throwError $ RigidUnificationFail i t
 unifies (Variable i _) t            = bind i t
 unifies t (Variable i _)            = bind i t
 unifies t1@(Apply a1 b1) t2@(Apply a2 b2) = manyOrErr (UnificationFail t1 t2) [a1, b1] [a2, b2]
