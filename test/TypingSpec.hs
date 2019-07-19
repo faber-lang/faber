@@ -1,6 +1,5 @@
 module TypingSpec (spec) where
 
-import Control.Arrow (right)
 import Test.Hspec
 
 import           Nameless
@@ -11,7 +10,7 @@ import           Utils
 
 -- helpers
 typeExpr :: Expr -> Either T.TypeError T.Type
-typeExpr = (right snd) . T.runInfer . T.inferExpr
+typeExpr = T.runTyping . T.inferExpr
 
 expectError :: Expr -> String
 expectError e = case typeExpr e of

@@ -31,6 +31,7 @@ dependencies:
 - extra
 - bytestring
 - lens
+- transformers
 
 library:
   source-dirs: src
