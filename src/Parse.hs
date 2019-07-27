@@ -220,7 +220,7 @@ expr = makeExprParser term operators
 
 -- type expression parser
 typeRws :: [String]
-typeRws = []
+typeRws = ["where"]
 
 typeIdentifier :: Parser String
 typeIdentifier = identifier' typeRws
@@ -256,9 +256,10 @@ typeConstraints = typeConstraint `sepBy1` symbol ","
 
 -- type scheme parser
 typeScheme :: Parser TypeScheme
-typeScheme = Forall <$> binder <*> (typeConstraints <* symbol "=>") <*> typeExpr
+typeScheme = Forall <$> binder <*> cstrs <*> typeExpr
   where
     binder = fromMaybe [] <$> optional forallBinder
+    cstrs = fromMaybe [] <$> optional (try typeConstraints <* symbol "=>")
     forallBinder = do
       symbol "forall"
       vars <- some typeIdentifier
