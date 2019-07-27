@@ -85,7 +85,7 @@ type Parser = Parsec Void String
 
 -- lexer utils
 headRws :: [Parser ()]
-headRws = [char_ '-', string_ "name", string_ "type"]
+headRws = [char_ '-', string_ "name", string_ "type", string_ "class", string_ "impl"]
   where
     char_   = void . C.char
     string_ = void . C.string
@@ -247,9 +247,16 @@ typeExpr = makeExprParser typeTerm typeOperators
 typeExprNoApp :: Parser TypeExpr
 typeExprNoApp = makeExprParser typeTerm typeOperatorsNoApp
 
+-- type constraints parser
+typeConstraint :: Parser TypeConstraint
+typeConstraint = TypeConstraint <$> (typeIdentifier <* symbol ":") <*> typeIdentifier
+
+typeConstraints :: Parser [TypeConstraint]
+typeConstraints = typeConstraint `sepBy1` symbol ","
+
 -- type scheme parser
 typeScheme :: Parser TypeScheme
-typeScheme = Forall <$> binder <*> typeExpr
+typeScheme = Forall <$> binder <*> (typeConstraints <* symbol "=>") <*> typeExpr
   where
     binder = fromMaybe [] <$> optional forallBinder
     forallBinder = do
