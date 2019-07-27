@@ -291,15 +291,15 @@ nameDefs = many (optional hyphen >> nameDef)
   where
     hyphen = try (newline >> symbol "-")
 
+newlineDelim :: String -> Parser ()
+newlineDelim s = try (optional newline >> symbol s)
+
 defName :: Parser Def
-defName = Name <$> (delim >> nameDef)
-  where
-    delim = try (optional newline >> symbol "name")
+defName = Name <$> (newlineDelim "name" >> nameDef)
 
 defType :: Parser Def
-defType = delim >> body
+defType = newlineDelim "type" >> body
   where
-    delim = try (optional newline >> symbol "type")
     body = do
       name <- identifier
       vars <- many identifier
@@ -312,8 +312,31 @@ defType = delim >> body
       params <- many typeExprNoApp
       return (ctor, params)
 
+classDef :: Parser ClassDef
+classDef = do
+  name <- typeIdentifier
+  symbol "with"
+  tv <- typeIdentifier
+  cstrs <- fromMaybe [] <$> optional (symbol "of" >> typeConstraints)
+  symbol "where"
+  ClassDef name tv cstrs <$> nameDefs
+
+instDef :: Parser InstDef
+instDef = do
+  name <- typeIdentifier
+  symbol "for"
+  scheme <- typeScheme
+  symbol "where"
+  InstDef name scheme <$> nameDefs
+
+defClass :: Parser Def
+defClass = Class <$> (newlineDelim "class" >> classDef)
+
+defInst :: Parser Def
+defInst = Instance <$> (newlineDelim "impl" >> instDef)
+
 definition :: Parser Def
-definition = defName <|> defType
+definition = defName <|> defType <|> defClass <|> defInst
 
 definitions :: Parser [Def]
 definitions = some definition
