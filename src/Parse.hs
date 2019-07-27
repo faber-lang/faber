@@ -43,8 +43,13 @@ data TypeExpr
   | ApplyTy TypeExpr TypeExpr
   deriving (Show, Eq)
 
+-- a : Num -> TypeConstraint "a" "Num"
+data TypeConstraint
+  = TypeConstraint String String
+  deriving (Show, Eq)
+
 data TypeScheme
-  = Forall [String] TypeExpr
+  = Forall [String] [TypeConstraint] TypeExpr
   deriving (Show, Eq)
 
 data NameDef
@@ -56,9 +61,21 @@ newtype TypeDef
   = Variant [(String, [TypeExpr])]
   deriving (Show, Eq)
 
+-- class Num with a of a : Eq where <defs> -> ClassDef "Num" "a" [TypeConstraint "a" "Eq"] defs
+data ClassDef
+  = ClassDef String String [TypeConstraint] [NameDef]
+  deriving (Show, Eq)
+
+-- impl Num for forall a. a where <defs> -> InstDef "Num" (Forall ["a"] $ Ident "a") defs
+data InstDef
+  = InstDef String TypeScheme [NameDef]
+  deriving (Show, Eq)
+
 data Def
   = Name NameDef
   | Type String [String] TypeDef
+  | Class ClassDef
+  | Instance InstDef
   deriving (Show, Eq)
 
 type Code = [Def]
