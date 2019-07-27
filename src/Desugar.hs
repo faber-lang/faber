@@ -3,7 +3,7 @@ module Desugar where
 import Data.Bifunctor (bimap)
 
 import qualified Operators as Op
-import           Parse     (TypeExpr (..), TypeScheme (..))
+import           Parse     (TypeConstraint (..), TypeExpr (..), TypeScheme (..))
 import qualified Parse     as P
 
 data Pattern
@@ -37,9 +37,19 @@ newtype TypeDef
   = Variant [(String, TypeExpr)]
   deriving (Show, Eq)
 
+data ClassDef
+  = ClassDef String String [TypeConstraint] [NameDef]
+  deriving (Show, Eq)
+
+data InstDef
+  = InstDef String TypeScheme [NameDef]
+  deriving (Show, Eq)
+
 data Def
   = Name NameDef
   | Type String [String] TypeDef
+  | Class ClassDef
+  | Instance InstDef
   deriving (Show, Eq)
 
 type Code = [Def]
@@ -80,7 +90,7 @@ makeCtorFunction tyname vars (ctor, ts) = [Name typeAnnot, Name nameDef]
     body = CtorApp ctor (Tuple $ map Variable names)
     nameDef = NameDef ctor $ desugarLambda names body
     ctorType = foldl ApplyTy (Ident tyname) $ map Ident vars
-    scheme = Forall vars $ foldr Function ctorType ts
+    scheme = Forall vars [] $ foldr Function ctorType ts
     typeAnnot = TypeAnnot ctor scheme
 
 desugarTypeDef :: String -> [String] -> P.TypeDef -> (TypeDef, [Def])
@@ -95,6 +105,8 @@ desugarDef (P.Name body) acc           = (Name $ desugarNameDef body):acc
 desugarDef (P.Type name vars body) acc = Type name vars typeDef:nameDefs ++ acc
   where
     (typeDef, nameDefs) = desugarTypeDef name vars body
+desugarDef (P.Class (P.ClassDef name tv cstrs defs)) acc = (Class $ ClassDef name tv cstrs $ map desugarNameDef defs) : acc
+desugarDef (P.Instance (P.InstDef name scheme defs)) acc = (Instance $ InstDef name scheme $ map desugarNameDef defs) : acc
 
 desugar :: P.Code -> Code
 desugar = foldr desugarDef []

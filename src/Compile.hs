@@ -1,5 +1,6 @@
 module Compile where
 
+import qualified Class    as Fab
 import qualified Closure  as Fab
 import qualified Codegen  as Fab
 import qualified Desugar  as Fab
@@ -31,7 +32,7 @@ compileToModule filename source = do
   ()  <- mapLeft TypeError $ Fab.typing ir
   return $ conv2 ir
   where
-    conv1 = Fab.nameless . Fab.convertMatch . Fab.desugar
+    conv1 = Fab.nameless . Fab.typeclasses . Fab.convertMatch . Fab.desugar
     conv2 = Fab.codegen . Fab.hoist . Fab.closure . Fab.flatten . Fab.lazy . Fab.convertEnum
 
 moduleToLLVMAssembly :: LLVMAST.Module -> IO ByteString

@@ -3,10 +3,11 @@ module Enum where
 import           Control.Monad.State
 import qualified Data.Map            as Map
 
+import           Class     (TypeScheme)
 import qualified Errors    as Err
 import qualified Nameless  as N
 import qualified Operators as Op
-import           Parse     (TypeExpr, TypeScheme)
+import           Parse     (TypeExpr)
 import           Utils
 
 data Expr

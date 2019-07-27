@@ -14,6 +14,7 @@ import           Data.Bool                 (bool)
 import qualified Data.Map                  as Map
 import qualified Data.Set                  as Set
 
+import qualified Class    as C (TypeScheme (..))
 import qualified Nameless as N
 import qualified Parse    as P
 import           Utils
@@ -350,8 +351,8 @@ withNames m a = do
   evalEnv .= old
   return r
 
-evalScheme :: P.TypeScheme -> Infer Scheme
-evalScheme (P.Forall as x) = do
+evalScheme :: C.TypeScheme -> Infer Scheme
+evalScheme (C.Forall as x) = do
   vars <- replicateM (length as) freshBound
   Forall (map destruct vars) <$> withNames (Map.fromList $ zip as vars) (evalType x)
   where

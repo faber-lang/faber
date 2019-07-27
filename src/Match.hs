@@ -4,7 +4,7 @@ import           Desugar   (Pattern (..))
 import qualified Desugar   as D
 import qualified Errors    as Err
 import qualified Operators as Op
-import           Parse     (TypeExpr, TypeScheme)
+import           Parse     (TypeConstraint, TypeExpr, TypeScheme)
 
 data Expr
   = Integer Int
@@ -32,9 +32,19 @@ newtype TypeDef
   = Variant [(String, TypeExpr)]
   deriving (Show, Eq)
 
+data ClassDef
+  = ClassDef String String [TypeConstraint] [NameDef]
+  deriving (Show, Eq)
+
+data InstDef
+  = InstDef String TypeScheme [NameDef]
+  deriving (Show, Eq)
+
 data Def
   = Name NameDef
   | Type String [String] TypeDef
+  | Class ClassDef
+  | Instance InstDef
   deriving (Show, Eq)
 
 type Code = [Def]
@@ -61,10 +71,7 @@ convertExpr :: D.Expr -> Expr
 convertExpr (D.Apply fn arg) = Apply (convertExpr fn) (convertExpr arg)
 convertExpr (D.Lambda p body) = Lambda p $ convertExpr body
 convertExpr (D.CtorApp name e) = CtorApp name $ convertExpr e
-convertExpr (D.LetIn defs body) = LetIn (map go defs) (convertExpr body)
-  where
-    go (D.NameDef name expr)     = NameDef name $ convertExpr expr
-    go (D.TypeAnnot name scheme) = TypeAnnot name scheme
+convertExpr (D.LetIn defs body) = LetIn (map convertNameDef defs) (convertExpr body)
 convertExpr (D.Variable name) = Variable name
 convertExpr (D.Integer i) = Integer i
 convertExpr (D.BinaryOp op a b) = BinaryOp op (convertExpr a) (convertExpr b)
@@ -76,10 +83,15 @@ convertExpr (D.Match target arms) = matcher (convertExpr target) arms
     matcher t ((p, e):xs) = runConvertPattern (matcher t xs) t p (convertExpr e)
     matcher _ []          = Error Err.MatchFail
 
+convertNameDef :: D.NameDef -> NameDef
+convertNameDef (D.NameDef name expr)     = NameDef name $ convertExpr expr
+convertNameDef (D.TypeAnnot name scheme) = TypeAnnot name scheme
+
 convertDef :: D.Def -> Def
-convertDef (D.Name (D.NameDef name expr)) = Name (NameDef name $ convertExpr expr)
-convertDef (D.Name (D.TypeAnnot name scheme)) = Name (TypeAnnot name scheme)
+convertDef (D.Name def)                      = Name $ convertNameDef def
 convertDef (D.Type name vars (D.Variant xs)) = Type name vars $ Variant xs
+convertDef (D.Class (D.ClassDef name tv cstrs defs)) = Class $ ClassDef name tv cstrs $ map convertNameDef defs
+convertDef (D.Instance (D.InstDef name scheme defs)) = Instance $ InstDef name scheme $ map convertNameDef defs
 
 convertCode :: D.Code -> Code
 convertCode = map convertDef
